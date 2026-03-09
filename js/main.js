@@ -2,7 +2,6 @@ const searchForm = document.getElementById("job-search-form");
 const searchInput = document.getElementById("job-search");
 const menuToggle = document.getElementById("menu-toggle");
 const mobileMenu = document.getElementById("mobile-menu");
-const dropdowns = Array.from(document.querySelectorAll("[data-dropdown]"));
 
 if (searchForm && searchInput) {
   searchForm.addEventListener("submit", (event) => {
@@ -23,9 +22,6 @@ if (menuToggle && mobileMenu) {
     menuToggle.setAttribute("aria-expanded", "false");
     mobileMenu.classList.add("hidden");
     document.body.classList.remove("overflow-hidden");
-    mobileMenu.querySelectorAll("details[open]").forEach((detail) => {
-      detail.open = false;
-    });
   };
 
   menuToggle.addEventListener("click", () => {
@@ -43,138 +39,6 @@ if (menuToggle && mobileMenu) {
     if (window.innerWidth >= 1024) {
       closeMenu();
     }
-  });
-}
-
-if (dropdowns.length) {
-  const isDesktopDropdownMode = () => window.innerWidth >= 1024;
-  const dropdownCloseTimers = new WeakMap();
-
-  const clearCloseTimer = (dropdown) => {
-    const timerId = dropdownCloseTimers.get(dropdown);
-
-    if (timerId) {
-      window.clearTimeout(timerId);
-      dropdownCloseTimers.delete(dropdown);
-    }
-  };
-
-  const scheduleClose = (dropdown) => {
-    clearCloseTimer(dropdown);
-    const timerId = window.setTimeout(() => {
-      closeDropdown(dropdown);
-      dropdownCloseTimers.delete(dropdown);
-    }, 140);
-    dropdownCloseTimers.set(dropdown, timerId);
-  };
-
-  const openDropdown = (dropdown) => {
-    const trigger = dropdown.querySelector("[data-dropdown-trigger]");
-    const menu = dropdown.querySelector("[data-dropdown-menu]");
-
-    if (!trigger || !menu) {
-      return;
-    }
-
-    clearCloseTimer(dropdown);
-    closeAllDropdowns(dropdown);
-    dropdown.classList.add("is-open");
-    trigger.setAttribute("aria-expanded", "true");
-    menu.classList.remove("hidden");
-  };
-
-  const closeDropdown = (dropdown) => {
-    const trigger = dropdown.querySelector("[data-dropdown-trigger]");
-    const menu = dropdown.querySelector("[data-dropdown-menu]");
-
-    if (!trigger || !menu) {
-      return;
-    }
-
-    clearCloseTimer(dropdown);
-    dropdown.classList.remove("is-open");
-    trigger.setAttribute("aria-expanded", "false");
-    menu.classList.add("hidden");
-  };
-
-  const closeAllDropdowns = (activeDropdown) => {
-    dropdowns.forEach((dropdown) => {
-      if (dropdown !== activeDropdown) {
-        closeDropdown(dropdown);
-      }
-    });
-  };
-
-  dropdowns.forEach((dropdown) => {
-    const trigger = dropdown.querySelector("[data-dropdown-trigger]");
-    const menu = dropdown.querySelector("[data-dropdown-menu]");
-
-    if (!trigger || !menu) {
-      return;
-    }
-
-    trigger.addEventListener("click", () => {
-      const isOpen = trigger.getAttribute("aria-expanded") === "true";
-
-      if (isOpen) {
-        closeDropdown(dropdown);
-        return;
-      }
-
-      openDropdown(dropdown);
-    });
-
-    menu.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => {
-        closeDropdown(dropdown);
-      });
-    });
-
-    dropdown.addEventListener("mouseenter", () => {
-      if (isDesktopDropdownMode()) {
-        openDropdown(dropdown);
-      }
-    });
-
-    dropdown.addEventListener("mouseleave", () => {
-      if (isDesktopDropdownMode()) {
-        scheduleClose(dropdown);
-      }
-    });
-
-    trigger.addEventListener("focus", () => {
-      openDropdown(dropdown);
-    });
-
-    dropdown.addEventListener("focusout", (event) => {
-      const nextFocusedElement = event.relatedTarget;
-
-      if (!(nextFocusedElement instanceof Element) || !dropdown.contains(nextFocusedElement)) {
-        closeDropdown(dropdown);
-      }
-    });
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    if (!target.closest("[data-dropdown]")) {
-      closeAllDropdowns();
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      closeAllDropdowns();
-    }
-  });
-
-  window.addEventListener("resize", () => {
-    closeAllDropdowns();
   });
 }
 
