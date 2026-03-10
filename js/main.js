@@ -6,11 +6,14 @@ const mobileMenu = document.getElementById("mobile-menu");
 if (searchForm && searchInput) {
   searchForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const url = new URL("https://careers.justeattakeaway.com/global/en/search-results");
+    const action = searchForm.getAttribute("action") || "https://careers.justeattakeaway.com/global/en/search-results";
+    const url = new URL(action, window.location.href);
     const query = searchInput.value.trim();
 
     if (query) {
       url.searchParams.set("keywords", query);
+    } else {
+      url.searchParams.delete("keywords");
     }
 
     window.location.href = url.toString();
@@ -161,4 +164,22 @@ document.querySelectorAll("[data-marquee-track]").forEach((track) => {
   }
 
   track.classList.add("is-ready");
+});
+
+document.querySelectorAll("[data-filter-toggle]").forEach((button) => {
+  const panelId = button.getAttribute("aria-controls");
+  const panel = panelId ? document.getElementById(panelId) : null;
+  const section = button.closest("[data-filter-section]");
+
+  if (!panel) {
+    return;
+  }
+
+  button.addEventListener("click", () => {
+    const isExpanded = button.getAttribute("aria-expanded") === "true";
+
+    button.setAttribute("aria-expanded", String(!isExpanded));
+    panel.hidden = isExpanded;
+    section?.classList.toggle("is-open", !isExpanded);
+  });
 });
