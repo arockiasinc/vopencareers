@@ -15,7 +15,7 @@
                 </svg>
                 <input id="job-search" name="keywords" type="search" placeholder="Search for job title" class="h-16 w-full rounded-full border-0 bg-white px-16 text-lg font-semibold text-jet-charcoal shadow-soft outline-none ring-0 placeholder:text-jet-charcoal/75 focus:outline-none focus:ring-2 focus:ring-white/70" autocomplete="off">
               </div>
-              <button type="submit" class="h-16 rounded-full bg-jet-charcoal px-9 text-xl font-bold text-white transition hover:bg-black sm:min-w-[165px] lg:min-w-[190px]">
+              <button type="submit" class="search-submit-button h-16 rounded-full bg-jet-charcoal px-9 text-xl font-bold text-white transition hover:bg-black sm:min-w-[165px] lg:min-w-[190px]">
                 Search
               </button>
             </form>
@@ -226,6 +226,33 @@
           </div>
         </div>
       </div>
+
+      <div class="countries-phrase-rotator" data-phrase-rotator>
+        <span class="countries-phrase-rotator-text" data-phrase-rotator-text>Join forces with us</span>
+        <ul hidden data-phrase-rotator-source>
+          <li>Join forces with us</li>
+          <li>Partner with us</li>
+          <li>Be part of our mission</li>
+          <li>Grow with us</li>
+          <li>Collaborate with the best</li>
+          <li>Shape the future with us</li>
+          <li>Step into the team</li>
+          <li>Let's make moves together</li>
+          <li>Roll with us</li>
+          <li>Build something epic with us</li>
+          <li>Team up for greatness</li>
+          <li>Get in on the action</li>
+          <li>Join the ride</li>
+          <li>Make your mark with us</li>
+          <li>Run this game with us</li>
+          <li>Stack wins together</li>
+          <li>Hustle with the crew</li>
+          <li>Join the boss squad</li>
+          <li>Own the grind with us</li>
+          <li>Ride with the winners</li>
+          <li>Make power moves together</li>
+        </ul>
+      </div>
     </section>
 
     <section class="bg-jet-cream pb-12 sm:pb-14 lg:pb-16">
@@ -246,22 +273,54 @@
 
     <section id="culture" class="bg-jet-cream pb-14 sm:pb-16 lg:pb-20">
       <div class="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10">
-        <div class="overflow-hidden rounded-[34px] bg-[#eceae7]">
+        <div class="overflow-hidden">
           <div class="grid items-center gap-8 px-6 py-10 sm:px-8 md:grid-cols-[1.02fr_0.98fr] md:px-12 lg:px-16 lg:py-14">
             <div class="relative order-2 md:order-1">
-              <img src="images/table-for-you.png" alt="Just Eat Takeaway paper bag" class="mx-auto w-full max-w-[520px] drop-shadow-[0_28px_28px_rgba(36,46,48,0.18)]">
+              <img src="images/earth-day-environment-eco-concept-close-up.webp" alt="Just Eat Takeaway paper bag" class="mx-auto w-full max-w-[520px]">
             </div>
 
             <div class="order-1 md:order-2">
-              <h2 class="jet-heading max-w-[11ch] text-[3rem] leading-[0.92] tracking-[-0.05em] text-jet-charcoal sm:text-[4rem] lg:text-[5rem]">
-                what’s on the table for you
+              <h2 class="jet-heading max-w-[14ch] text-[3rem] leading-[0.92] tracking-[-0.05em] text-jet-charcoal sm:text-[4rem] lg:text-[4rem]">
+                At VOpen Market
               </h2>
-              <p class="mt-6 max-w-[32rem] text-lg font-semibold leading-8 text-jet-charcoal/90 sm:text-xl">
-                Every day is a new opportunity. We move forward together, growing in our roles as we work to grow the business. We're free to build, proud to take responsibility, and excited to see our projects make a difference to millions of our customers and partners.
-              </p>
-              <a href="#" target="_blank" rel="noreferrer" class="mt-8 inline-flex rounded-full border border-jet-charcoal/55 bg-white px-7 py-4 text-lg font-semibold text-jet-charcoal transition hover:bg-jet-charcoal hover:text-white">
-                Learn more about our culture
-              </a>
+              <div class="mt-6 max-w-[36rem] space-y-4 text-base font-semibold leading-8 text-jet-charcoal/90 sm:text-lg">
+                <p>
+                  At VOpen Market, we only hire individuals who are truly committed and passionate about growing with the company. We have built Canada's #1 open marketplace, and we are looking for team members who share our vision and dedication.
+                </p>
+                <div class="space-y-5">
+                  <p class="text-lg font-bold text-jet-charcoal">
+                    Important Requirements
+                  </p>
+                  <ul class="mt-5 list-none space-y-4 p-0 text-jet-charcoal">
+                    <li class="flex items-start gap-3">
+                      <span class="inline-flex shrink-0 items-center justify-center rounded-full bg-jet-orange text-white" style="margin-top: 0.25rem; width: 1.5rem; height: 1.5rem;">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                      </span>
+                      <span>All candidates must have a criminal record check completed within the past 3 months.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                      <span class="inline-flex shrink-0 items-center justify-center rounded-full bg-jet-orange text-white" style="margin-top: 0.25rem; width: 1.5rem; height: 1.5rem;">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                      </span>
+                      <span>We will contact candidates who best match our requirements and company culture.</span>
+                    </li>
+                  </ul>
+                  <div style="margin-top: 1.25rem; border-left: 4px solid #ff8000; padding-left: 1rem;">
+                    <p class="text-sm font-bold uppercase tracking-[0.18em] text-jet-charcoal/70">Note</p>
+                    <p class="mt-2 text-jet-charcoal">
+                      Please note: Do not call or submit multiple applications, as it will not increase your chances of selection. We value professionalism and respect throughout the hiring process.
+                    </p>
+                  </div>
+                </div>
+                <br/>
+                <p>
+                  If you are passionate about making an impact and growing with a leading Canadian marketplace, we encourage you to apply!
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -274,9 +333,7 @@
           <h2 class="jet-heading text-[2.75rem] leading-[0.92] tracking-[-0.05em] sm:text-[4rem] lg:text-[5rem]">
             understand what we stand for
           </h2>
-          <a href="#" target="_blank" rel="noreferrer" class="mt-5 inline-flex rounded-full border border-jet-charcoal/50 bg-white px-7 py-4 text-lg font-semibold text-jet-charcoal transition hover:bg-jet-charcoal hover:text-white">
-            Watch more stories
-          </a>
+          
         </div>
 
         <div class="mt-8 lg:mt-10">
@@ -524,53 +581,6 @@
       </div>
     </section>
 
-    <section class="mt-8 bg-jet-sand py-8 sm:mt-10 sm:py-9 lg:mt-12 lg:py-10">
-      <div class="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
-        <h2 class="jet-heading text-center text-[3rem] leading-none tracking-[-0.05em] lg:text-left lg:text-[4.2rem]">
-          keep in touch
-        </h2>
 
-        <div class="flex flex-wrap items-center justify-center gap-3 lg:justify-end">
-          <a href="https://www.linkedin.com/company/just-eat-takeaway-com/posts/?feedView=all" target="_blank" rel="noreferrer" class="social-pill">
-            <span class="social-pill-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M6.94 8.5H3.56V20h3.38V8.5Zm.22-3.55C7.16 3.8 6.25 3 5.25 3s-1.9.8-1.9 1.95c0 1.12.88 1.94 1.85 1.94h.02c1.02 0 1.94-.82 1.94-1.94ZM20.44 13.04c0-3.44-1.83-5.04-4.27-5.04c-1.97 0-2.86 1.08-3.36 1.84V8.5H9.43c.05.89 0 11.5 0 11.5h3.38v-6.43c0-.34.03-.68.12-.92c.27-.67.88-1.37 1.91-1.37c1.35 0 1.9 1.03 1.9 2.54V20H20.1v-6.96h.34Z"></path>
-              </svg>
-            </span>
-            Linkedin
-          </a>
-
-          <a href="https://www.instagram.com/wearejetcom/?hl=en" target="_blank" rel="noreferrer" class="social-pill">
-            <span class="social-pill-icon">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect x="4.25" y="4.25" width="15.5" height="15.5" rx="4.25" stroke="currentColor" stroke-width="2"></rect>
-                <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"></circle>
-                <circle cx="17.35" cy="6.65" r="1.1" fill="currentColor"></circle>
-              </svg>
-            </span>
-            Instagram
-          </a>
-
-          <a href="https://www.youtube.com/channel/UCsc8W65CYNODk27yrsctYMg" target="_blank" rel="noreferrer" class="social-pill">
-            <span class="social-pill-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M21.3 7.2a2.95 2.95 0 0 0-2.07-2.1C17.4 4.6 12 4.6 12 4.6s-5.4 0-7.23.5A2.95 2.95 0 0 0 2.7 7.2C2.2 9.06 2.2 12 2.2 12s0 2.94.5 4.8a2.95 2.95 0 0 0 2.07 2.1c1.83.5 7.23.5 7.23.5s5.4 0 7.23-.5a2.95 2.95 0 0 0 2.07-2.1c.5-1.86.5-4.8.5-4.8s0-2.94-.5-4.8ZM10.3 15.2V8.8L15.8 12l-5.5 3.2Z"></path>
-              </svg>
-            </span>
-            Youtube
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <section class="bg-jet-charcoal">
-      <div class="mx-auto grid max-w-[1440px] md:grid-cols-2">
-        <a href="#" target="_blank" rel="noreferrer" class="utility-link border-b border-white/10 md:border-b-0 md:border-r md:border-white/10">
-          Manage preferences
-        </a>
-        <a href="#" target="_blank" rel="noreferrer" class="utility-link">
-          Personal Information
-        </a>
-      </div>
-    </section>
-    <?php include 'containerfooter.php'; ?>
+    
+    <?php include 'container/footer.php'; ?>

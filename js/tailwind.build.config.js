@@ -3,10 +3,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        "jet-orange": "#FF8000",
+        "jet-orange": "#FF5F1F",
         "jet-charcoal": "#242E30",
-        "jet-cream": "#F5F3F1",
-        "jet-sand": "#E7CDA2",
+        "jet-cream": "#FFFFFF",
+        "jet-sand": "#FF5F1F",
       },
       fontFamily: {
         jet: ["JETSans", "sans-serif"],

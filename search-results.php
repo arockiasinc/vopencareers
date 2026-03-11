@@ -1,82 +1,104 @@
 <?php
+declare(strict_types=1);
+
 $pageTitle = 'Search Jobs | VOpen Market Careers';
-$pageDescription = 'Browse static career opportunities at VOpen Market and explore the teams building the future of construction sourcing across Canada.';
+$pageDescription = 'Browse current career opportunities at VOpen Market and explore roles published from the careers admin panel.';
 $currentPage = 'search';
+$bodyClass = 'bg-jet-cream';
+$headerClass = 'sticky top-0 z-50 border-b border-black/5 bg-white site-header-elevated';
+
+require_once __DIR__ . '/admin/container/db.php';
+
+function escapeSearchResultsValue(?string $value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function formatSearchResultsDate(?string $value): string
+{
+    if ($value === null || trim($value) === '') {
+        return 'Recently posted';
+    }
+
+    try {
+        return 'Posted ' . (new DateTimeImmutable($value))->format('M j, Y');
+    } catch (Throwable $exception) {
+        return 'Recently posted';
+    }
+}
+
+function formatSearchResultsMonth(?string $value): string
+{
+    if ($value === null || trim($value) === '') {
+        return 'Recently added';
+    }
+
+    try {
+        return (new DateTimeImmutable($value))->format('M Y');
+    } catch (Throwable $exception) {
+        return 'Recently added';
+    }
+}
+
+function buildSearchResultsFilters(array $counts): array
+{
+    if ($counts === []) {
+        return [];
+    }
+
+    arsort($counts);
+
+    $filters = [];
+
+    foreach ($counts as $label => $count) {
+        $filters[] = [
+            'label' => (string) $label,
+            'count' => (int) $count,
+            'checked' => false,
+        ];
+    }
+
+    return $filters;
+}
+
+function summarizeSearchResultsDescription(?string $value, int $limit = 280): string
+{
+    $plainText = html_entity_decode(strip_tags((string) $value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $plainText = trim((string) preg_replace('/\s+/', ' ', $plainText));
+
+    if ($plainText === '') {
+        return 'More details are available for this role in the careers admin panel.';
+    }
+
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        if (mb_strlen($plainText) <= $limit) {
+            return $plainText;
+        }
+
+        return rtrim(mb_substr($plainText, 0, $limit - 3)) . '...';
+    }
+
+    if (strlen($plainText) <= $limit) {
+        return $plainText;
+    }
+
+    return rtrim(substr($plainText, 0, $limit - 3)) . '...';
+}
 
 $searchTerm = trim((string) ($_GET['keywords'] ?? ''));
+$pageError = '';
+$jobRecords = [];
 
-$allJobs = [
-    [
-        'title' => 'Sales Operations Project Manager',
-        'location' => 'Toronto, ON',
-        'category' => 'Sales',
-        'type' => 'Full-time / Hybrid',
-        'description' => 'Drive CRM integrity, reporting, and commercial planning across our supplier growth teams as VOpen scales nationally.',
-    ],
-    [
-        'title' => 'Integration Account Manager',
-        'location' => 'Vancouver, BC',
-        'category' => 'Independent Contractor',
-        'type' => 'Full-time / Hybrid',
-        'description' => 'Own strategic supplier onboarding, coordinate implementation milestones, and turn complex launches into repeatable playbooks.',
-    ],
-    [
-        'title' => 'Junior Recruiter',
-        'location' => 'Toronto, ON',
-        'category' => 'Corporate',
-        'type' => 'Full-time / On-site',
-        'description' => 'Support hiring across operations, product, and customer teams while shaping a fast, candidate-friendly recruiting process.',
-    ],
-    [
-        'title' => 'Financial Accountant',
-        'location' => 'Remote, Canada',
-        'category' => 'Finance',
-        'type' => 'Full-time / Remote',
-        'description' => 'Lead month-end close work, partner with operations leaders, and help build the financial controls behind a growing marketplace.',
-    ],
-    [
-        'title' => 'Account Executive, Commercial Growth',
-        'location' => 'Calgary, AB',
-        'category' => 'Sales',
-        'type' => 'Full-time / Field',
-        'description' => 'Win new contractor accounts, grow regional demand, and translate market signals into pipeline for our commercial team.',
-    ],
-    [
-        'title' => 'Network Optimisation Analyst',
-        'location' => 'Montreal, QC',
-        'category' => 'Data & Analytics',
-        'type' => 'Full-time / Hybrid',
-        'description' => 'Model delivery coverage, analyze supplier density, and recommend smarter routing and fulfillment decisions across Canada.',
-    ],
-    [
-        'title' => 'Senior Product Manager, Operations Research',
-        'location' => 'Remote, Canada',
-        'category' => 'Tech & Product',
-        'type' => 'Full-time / Remote',
-        'description' => 'Turn forecasting, routing, and inventory challenges into product bets that improve availability, speed, and margin.',
-    ],
-    [
-        'title' => 'Supplier Success Specialist',
-        'location' => 'Edmonton, AB',
-        'category' => 'Customer Service',
-        'type' => 'Full-time / Hybrid',
-        'description' => 'Help suppliers launch smoothly, remove operational friction, and keep partner performance high through proactive support.',
-    ],
-    [
-        'title' => 'Principal Compliance Manager',
-        'location' => 'Toronto, ON',
-        'category' => 'Other',
-        'type' => '12-month contract / Hybrid',
-        'description' => 'Own policy execution, strengthen internal controls, and guide teams through regulatory and commercial compliance requirements.',
-    ],
-    [
-        'title' => 'Health and Safety Specialist',
-        'location' => 'Mississauga, ON',
-        'category' => 'Operations & Logistics',
-        'type' => 'Full-time / On-site',
-        'description' => 'Build practical health and safety programs across warehousing and logistics environments as we expand our network footprint.',
-    ],
-];
+try {
+    $jobRecords = fetchJobRecords();
+} catch (Throwable $exception) {
+    $pageError = 'The jobs list could not be loaded right now. Please try again later.';
+}
+
+$allJobs = array_values(array_filter(
+    $jobRecords,
+    static fn(array $job): bool => (int) ($job['status'] ?? 0) === 1
+));
 
 $jobs = $allJobs;
 
@@ -84,81 +106,45 @@ if ($searchTerm !== '') {
     $jobs = array_values(array_filter(
         $allJobs,
         static function (array $job) use ($searchTerm): bool {
-            $haystack = implode(' ', [
-                $job['title'],
-                $job['location'],
-                $job['category'],
-                $job['type'],
-                $job['description'],
-            ]);
+            $haystack = implode(' ', array_filter([
+                trim((string) ($job['title'] ?? '')),
+                trim((string) ($job['location'] ?? '')),
+                trim((string) ($job['description'] ?? '')),
+                trim((string) ($job['created_at'] ?? '')),
+            ], static fn(string $value): bool => $value !== ''));
 
             return stripos($haystack, $searchTerm) !== false;
         }
     ));
 }
 
-$categoryLabels = [
-    'Sales',
-    'Corporate',
-    'Finance',
-    'Tech & Product',
-    'Data & Analytics',
-    'Customer Service',
-    'Operations & Logistics',
-    'Other',
-    'Independent Contractor',
-];
-
-$categoryCounts = array_count_values(array_map(
-    static fn(array $job): string => $job['category'],
-    $allJobs
-));
-
-$categoryFilters = array_map(
-    static fn(string $label): array => [
-        'label' => $label,
-        'count' => $categoryCounts[$label] ?? 0,
-        'checked' => false,
-    ],
-    $categoryLabels
-);
-
-$countryFilters = [
-    [
-        'label' => 'Canada',
-        'count' => count($allJobs),
-        'checked' => false,
-    ],
-];
-
-$cityCounts = [];
-$typeCounts = [];
+$locationCounts = [];
+$publishedCounts = [];
 
 foreach ($allJobs as $job) {
-    $locationParts = array_map('trim', explode(',', $job['location']));
-    $cityLabel = $locationParts[0] !== '' ? $locationParts[0] : $job['location'];
+    $locationLabel = trim((string) ($job['location'] ?? ''));
 
-    $cityCounts[$cityLabel] = ($cityCounts[$cityLabel] ?? 0) + 1;
-    $typeCounts[$job['type']] = ($typeCounts[$job['type']] ?? 0) + 1;
+    if ($locationLabel === '') {
+        $locationLabel = 'Unspecified';
+    }
+
+    $locationCounts[$locationLabel] = ($locationCounts[$locationLabel] ?? 0) + 1;
+
+    $publishedLabel = formatSearchResultsMonth((string) ($job['created_at'] ?? ''));
+    $publishedCounts[$publishedLabel] = ($publishedCounts[$publishedLabel] ?? 0) + 1;
 }
 
-$cityFilters = array_map(
-    static fn(string $label): array => [
-        'label' => $label,
-        'count' => $cityCounts[$label],
-        'checked' => false,
-    ],
-    array_keys($cityCounts)
-);
-
-$typeFilters = array_map(
-    static fn(string $label): array => [
-        'label' => $label,
-        'count' => $typeCounts[$label],
-        'checked' => false,
-    ],
-    array_keys($typeCounts)
-);
+$locationFilters = buildSearchResultsFilters($locationCounts);
+$publishedFilters = buildSearchResultsFilters($publishedCounts);
+$availabilityFilters = $allJobs === []
+    ? []
+    : [
+        [
+            'label' => 'Open roles',
+            'count' => count($allJobs),
+            'checked' => false,
+        ],
+    ];
 
 $promoCards = [
     ['src' => 'images/gallery-1.png', 'alt' => 'Team members collaborating around a table'],
@@ -169,18 +155,21 @@ $promoCards = [
 
 $jobCount = count($jobs);
 $jobLabel = $jobCount === 1 ? 'job' : 'jobs';
-$searchValue = htmlspecialchars($searchTerm, ENT_QUOTES, 'UTF-8');
+$searchValue = escapeSearchResultsValue($searchTerm);
 
 include 'container/header.php';
 ?>
+
+
 
 <section class="bg-jet-cream">
   <div class="grid overflow-hidden lg:grid-cols-[1.03fr_0.97fr]">
     <div class="bg-jet-orange px-5 py-7 sm:px-8 sm:py-10 md:px-10 md:py-12 lg:px-14 lg:py-16 xl:px-16 xl:py-20">
       <div class="mx-auto max-w-[680px]">
-        <h1 class="jet-heading max-w-[10ch] text-[3.1rem] leading-[0.9] tracking-[-0.06em] text-white sm:text-[4rem] lg:text-[5.1rem]">
-          search jobs
-        </h1>
+        <p class="jobs-search-kicker">Find the role that fits</p>
+        <p class="jobs-search-copy">
+          Search by title, location, or keyword to scan the openings published from the admin panel.
+        </p>
 
         <form id="job-search-form" action="search-results.php" method="get" class="mt-8 flex flex-col gap-3 sm:flex-row" role="search" aria-label="Search jobs">
           <label for="job-search" class="sr-only">Search for job title</label>
@@ -190,7 +179,7 @@ include 'container/header.php';
             </svg>
             <input id="job-search" name="keywords" type="search" value="<?php echo $searchValue; ?>" placeholder="Search for job title" class="h-16 w-full rounded-full border-0 bg-white px-16 text-lg font-semibold text-jet-charcoal shadow-soft outline-none ring-0 placeholder:text-jet-charcoal/75 focus:outline-none focus:ring-2 focus:ring-white/70" autocomplete="off">
           </div>
-          <button type="submit" class="h-16 rounded-full bg-jet-charcoal px-9 text-xl font-bold text-white transition hover:bg-black sm:min-w-[165px] lg:min-w-[190px]">
+          <button type="submit" class="search-submit-button h-16 rounded-full bg-jet-charcoal px-9 text-xl font-bold text-white transition hover:bg-black sm:min-w-[165px] lg:min-w-[190px]">
             Search
           </button>
         </form>
@@ -228,99 +217,99 @@ include 'container/header.php';
       <aside class="search-results-sidebar">
         <div class="search-results-sidebar-panel">
           <div class="flex items-center justify-between gap-4">
-            <h2 class="search-results-sidebar-title">Refine your search</h2>
-            <button type="button" class="search-reset-pill">Reset filters</button>
+            <h2 class="search-results-sidebar-title">Published jobs</h2>
+            <a href="search-results.php" class="search-reset-pill">Reset search</a>
           </div>
 
           <div class="search-filter-block">
-            <p class="search-filter-label">Job Categories</p>
-
-            <div class="search-filter-search">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M11 5a6 6 0 1 0 0 12a6 6 0 0 0 0-12Zm8 14l-3.25-3.25" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-              <input type="text" class="search-filter-input" value="" placeholder="Search job category">
-            </div>
+            <p class="search-filter-label">Locations</p>
 
             <ul class="search-filter-list">
-              <?php foreach ($categoryFilters as $filter): ?>
+              <?php if ($locationFilters === []): ?>
                 <li class="search-filter-option">
                   <label>
-                    <input type="checkbox"<?php echo $filter['checked'] ? ' checked' : ''; ?>>
-                    <span><?php echo htmlspecialchars($filter['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-                    <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                    <input type="checkbox" disabled>
+                    <span>No published locations yet</span>
+                    <span class="search-filter-count">0</span>
                   </label>
                 </li>
-              <?php endforeach; ?>
+              <?php else: ?>
+                <?php foreach ($locationFilters as $filter): ?>
+                  <li class="search-filter-option">
+                    <label>
+                      <input type="checkbox" disabled<?php echo $filter['checked'] ? ' checked' : ''; ?>>
+                      <span><?php echo escapeSearchResultsValue($filter['label']); ?></span>
+                      <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                    </label>
+                  </li>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </ul>
           </div>
 
           <div class="search-filter-accordion">
             <div class="search-filter-section" data-filter-section>
-              <button type="button" class="search-filter-toggle" data-filter-toggle aria-expanded="false" aria-controls="country-filter-panel">
-                <span>Country</span>
+              <button type="button" class="search-filter-toggle" data-filter-toggle aria-expanded="false" aria-controls="published-filter-panel">
+                <span>Published</span>
                 <svg viewBox="0 0 12 8" fill="currentColor" aria-hidden="true">
                   <path d="M1.41.59 6 5.17 10.59.59 12 2l-6 6-6-6L1.41.59Z"></path>
                 </svg>
               </button>
 
-              <div id="country-filter-panel" class="search-filter-panel" hidden>
+              <div id="published-filter-panel" class="search-filter-panel" hidden>
                 <ul class="search-filter-list search-filter-list-compact">
-                  <?php foreach ($countryFilters as $filter): ?>
+                  <?php if ($publishedFilters === []): ?>
                     <li class="search-filter-option">
                       <label>
-                        <input type="checkbox"<?php echo $filter['checked'] ? ' checked' : ''; ?>>
-                        <span><?php echo htmlspecialchars($filter['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-                        <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                        <input type="checkbox" disabled>
+                        <span>No publish dates yet</span>
+                        <span class="search-filter-count">0</span>
                       </label>
                     </li>
-                  <?php endforeach; ?>
+                  <?php else: ?>
+                    <?php foreach ($publishedFilters as $filter): ?>
+                      <li class="search-filter-option">
+                        <label>
+                          <input type="checkbox" disabled<?php echo $filter['checked'] ? ' checked' : ''; ?>>
+                          <span><?php echo escapeSearchResultsValue($filter['label']); ?></span>
+                          <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                        </label>
+                      </li>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </ul>
               </div>
             </div>
 
             <div class="search-filter-section" data-filter-section>
-              <button type="button" class="search-filter-toggle" data-filter-toggle aria-expanded="false" aria-controls="city-filter-panel">
-                <span>City</span>
+              <button type="button" class="search-filter-toggle" data-filter-toggle aria-expanded="false" aria-controls="availability-filter-panel">
+                <span>Availability</span>
                 <svg viewBox="0 0 12 8" fill="currentColor" aria-hidden="true">
                   <path d="M1.41.59 6 5.17 10.59.59 12 2l-6 6-6-6L1.41.59Z"></path>
                 </svg>
               </button>
 
-              <div id="city-filter-panel" class="search-filter-panel" hidden>
+              <div id="availability-filter-panel" class="search-filter-panel" hidden>
                 <ul class="search-filter-list search-filter-list-compact">
-                  <?php foreach ($cityFilters as $filter): ?>
+                  <?php if ($availabilityFilters === []): ?>
                     <li class="search-filter-option">
                       <label>
-                        <input type="checkbox"<?php echo $filter['checked'] ? ' checked' : ''; ?>>
-                        <span><?php echo htmlspecialchars($filter['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-                        <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                        <input type="checkbox" disabled>
+                        <span>No open roles</span>
+                        <span class="search-filter-count">0</span>
                       </label>
                     </li>
-                  <?php endforeach; ?>
-                </ul>
-              </div>
-            </div>
-
-            <div class="search-filter-section" data-filter-section>
-              <button type="button" class="search-filter-toggle" data-filter-toggle aria-expanded="false" aria-controls="type-filter-panel">
-                <span>Type</span>
-                <svg viewBox="0 0 12 8" fill="currentColor" aria-hidden="true">
-                  <path d="M1.41.59 6 5.17 10.59.59 12 2l-6 6-6-6L1.41.59Z"></path>
-                </svg>
-              </button>
-
-              <div id="type-filter-panel" class="search-filter-panel" hidden>
-                <ul class="search-filter-list search-filter-list-compact">
-                  <?php foreach ($typeFilters as $filter): ?>
-                    <li class="search-filter-option">
-                      <label>
-                        <input type="checkbox"<?php echo $filter['checked'] ? ' checked' : ''; ?>>
-                        <span><?php echo htmlspecialchars($filter['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-                        <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
-                      </label>
-                    </li>
-                  <?php endforeach; ?>
+                  <?php else: ?>
+                    <?php foreach ($availabilityFilters as $filter): ?>
+                      <li class="search-filter-option">
+                        <label>
+                          <input type="checkbox" disabled<?php echo $filter['checked'] ? ' checked' : ''; ?>>
+                          <span><?php echo escapeSearchResultsValue($filter['label']); ?></span>
+                          <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                        </label>
+                      </li>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </ul>
               </div>
             </div>
@@ -336,23 +325,32 @@ include 'container/header.php';
               <span class="search-results-query">for &ldquo;<?php echo $searchValue; ?>&rdquo;</span>
             <?php endif; ?>
           </p>
-
-          <button type="button" class="search-sort-button">
-            <span>Most relevant</span>
-            <svg viewBox="0 0 12 8" fill="currentColor" aria-hidden="true">
-              <path d="M1.41.59 6 5.17 10.59.59 12 2l-6 6-6-6L1.41.59Z"></path>
-            </svg>
-          </button>
+          <div class="search-sort-button" aria-hidden="true">
+            <span>Newest published roles</span>
+          </div>
         </div>
 
         <div class="search-results-list-shell" role="list" aria-label="Job results">
-          <?php if ($jobCount === 0): ?>
+          <?php if ($pageError !== ''): ?>
             <article class="search-no-results">
               <h3 class="text-[1.8rem] font-black leading-none tracking-[-0.04em] text-jet-charcoal">
-                No roles matched your search
+                Jobs are unavailable right now
               </h3>
               <p class="mt-3 max-w-[40rem] text-base font-semibold leading-7 text-jet-charcoal/75">
-                Try a broader keyword like <span class="font-black text-jet-charcoal">sales</span>, <span class="font-black text-jet-charcoal">product</span>, or <span class="font-black text-jet-charcoal">operations</span> to preview more openings in this static layout.
+                <?php echo escapeSearchResultsValue($pageError); ?>
+              </p>
+            </article>
+          <?php elseif ($jobCount === 0): ?>
+            <article class="search-no-results">
+              <h3 class="text-[1.8rem] font-black leading-none tracking-[-0.04em] text-jet-charcoal">
+                <?php echo $searchTerm !== '' ? 'No roles matched your search' : 'No jobs have been published yet'; ?>
+              </h3>
+              <p class="mt-3 max-w-[40rem] text-base font-semibold leading-7 text-jet-charcoal/75">
+                <?php if ($searchTerm !== ''): ?>
+                  Try a broader keyword or clear the search to view all published openings.
+                <?php else: ?>
+                  Add jobs from the admin panel to show them in this listing.
+                <?php endif; ?>
               </p>
             </article>
           <?php else: ?>
@@ -360,49 +358,31 @@ include 'container/header.php';
               <article class="search-job-card" role="listitem">
                 <div class="min-w-0 flex-1">
                   <div class="search-job-meta">
-                    <span class="search-job-pill"><?php echo htmlspecialchars($job['location'], ENT_QUOTES, 'UTF-8'); ?></span>
-                    <span class="search-job-pill"><?php echo htmlspecialchars($job['category'], ENT_QUOTES, 'UTF-8'); ?></span>
-                    <span class="search-job-pill"><?php echo htmlspecialchars($job['type'], ENT_QUOTES, 'UTF-8'); ?></span>
+                    <?php if (trim((string) ($job['location'] ?? '')) !== ''): ?>
+                      <span class="search-job-pill"><?php echo escapeSearchResultsValue((string) $job['location']); ?></span>
+                    <?php endif; ?>
+                    <span class="search-job-pill">Open role</span>
+                    <span class="search-job-pill"><?php echo escapeSearchResultsValue(formatSearchResultsDate((string) ($job['created_at'] ?? ''))); ?></span>
                   </div>
 
                   <h3 class="search-job-title">
-                    <a href="#"><?php echo htmlspecialchars($job['title'], ENT_QUOTES, 'UTF-8'); ?></a>
+                    <span><?php echo escapeSearchResultsValue((string) ($job['title'] ?? '')); ?></span>
                   </h3>
 
                   <p class="search-job-copy">
-                    <?php echo htmlspecialchars($job['description'], ENT_QUOTES, 'UTF-8'); ?>
+                    <?php echo escapeSearchResultsValue(summarizeSearchResultsDescription((string) ($job['description'] ?? ''))); ?>
                   </p>
                 </div>
 
-                <a href="#" class="search-job-link" aria-label="View <?php echo htmlspecialchars($job['title'], ENT_QUOTES, 'UTF-8'); ?>">
+                <div class="search-job-link" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M8 16 16 8M10 8h6v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                   </svg>
-                </a>
+                </div>
               </article>
             <?php endforeach; ?>
           <?php endif; ?>
         </div>
-
-        <?php if ($jobCount > 0): ?>
-          <nav class="search-pagination" aria-label="Pagination">
-            <a href="#" class="search-pagination-link is-disabled" aria-disabled="true">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="m14.5 6-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </a>
-            <a href="#" class="search-pagination-link is-active" aria-current="page">1</a>
-            <a href="#" class="search-pagination-link">2</a>
-            <a href="#" class="search-pagination-link">3</a>
-            <a href="#" class="search-pagination-link">4</a>
-            <a href="#" class="search-pagination-link">5</a>
-            <a href="#" class="search-pagination-link">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="m9.5 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </a>
-          </nav>
-        <?php endif; ?>
       </div>
     </div>
   </div>

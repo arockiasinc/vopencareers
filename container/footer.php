@@ -1,4 +1,4 @@
- <section class="mt-8 bg-jet-sand py-8 sm:mt-10 sm:py-9 lg:mt-12 lg:py-10">
+ <section class="keep-in-touch-section mt-8 bg-jet-sand py-8 sm:mt-10 sm:py-9 lg:mt-12 lg:py-10">
       <div class="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
         <h2 class="jet-heading text-center text-[3rem] leading-none tracking-[-0.05em] lg:text-left lg:text-[4.2rem]">
           keep in touch

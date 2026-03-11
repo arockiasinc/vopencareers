@@ -166,6 +166,36 @@ document.querySelectorAll("[data-marquee-track]").forEach((track) => {
   track.classList.add("is-ready");
 });
 
+document.querySelectorAll("[data-phrase-rotator]").forEach((rotator) => {
+  const text = rotator.querySelector("[data-phrase-rotator-text]");
+  const phrases = Array.from(rotator.querySelectorAll("[data-phrase-rotator-source] li"), (item) => item.textContent?.trim()).filter(Boolean);
+
+  if (!text || phrases.length === 0) {
+    return;
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let index = 0;
+
+  text.textContent = phrases[index];
+
+  window.setInterval(() => {
+    index = (index + 1) % phrases.length;
+
+    if (prefersReducedMotion) {
+      text.textContent = phrases[index];
+      return;
+    }
+
+    rotator.classList.add("is-switching");
+
+    window.setTimeout(() => {
+      text.textContent = phrases[index];
+      rotator.classList.remove("is-switching");
+    }, 220);
+  }, 2600);
+});
+
 document.querySelectorAll("[data-filter-toggle]").forEach((button) => {
   const panelId = button.getAttribute("aria-controls");
   const panel = panelId ? document.getElementById(panelId) : null;
