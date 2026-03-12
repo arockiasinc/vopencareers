@@ -259,13 +259,13 @@
       <div class="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10">
         <div class="gallery-track flex snap-x snap-mandatory gap-4 overflow-x-auto md:grid md:grid-cols-3 md:overflow-visible lg:gap-8">
           <article class="min-w-[84%] snap-start md:min-w-0">
-            <img src="images/gallery-1.png" alt="Just Eat Takeaway team members" class="h-full w-full rounded-[30px] object-cover shadow-soft">
+            <img src="images/Canada-Flag-VOpen-Market.webp" alt="Just Eat Takeaway team members" class="h-full w-full rounded-[30px] object-cover shadow-soft">
           </article>
           <article class="min-w-[84%] snap-start md:min-w-0">
-            <img src="images/gallery-2.png" alt="Food and kitchen ingredients" class="h-full w-full rounded-[30px] object-cover shadow-soft">
+            <img src="images/jobs-in-VOpen-Market.webp" alt="Food and kitchen ingredients" class="h-full w-full rounded-[30px] object-cover shadow-soft">
           </article>
           <article class="min-w-[84%] snap-start md:min-w-0">
-            <img src="images/gallery-3.jpg" alt="People standing together outdoors" class="h-full w-full rounded-[30px] object-cover shadow-soft">
+            <img src="images/Passion-led-us-to-VOpen-Market.webp" alt="People standing together outdoors" class="h-full w-full rounded-[30px] object-cover shadow-soft">
           </article>
         </div>
       </div>
@@ -276,7 +276,7 @@
         <div class="overflow-hidden">
           <div class="grid items-center gap-8 px-6 py-10 sm:px-8 md:grid-cols-[1.02fr_0.98fr] md:px-12 lg:px-16 lg:py-14">
             <div class="relative order-2 md:order-1">
-              <img src="images/earth-day-environment-eco-concept-close-up.webp" alt="Just Eat Takeaway paper bag" class="mx-auto w-full max-w-[520px]">
+              <img src="images/a-true-north-company-vopen-market.webp" alt="Just Eat Takeaway paper bag" class="mx-auto w-full max-w-[520px]">
             </div>
 
             <div class="order-1 md:order-2">
@@ -327,76 +327,7 @@
       </div>
     </section>
 
-    <section id="stories" class="bg-jet-cream pb-10 sm:pb-12 lg:pb-16">
-      <div class="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10">
-        <div class="text-center">
-          <h2 class="jet-heading text-[2.75rem] leading-[0.92] tracking-[-0.05em] sm:text-[4rem] lg:text-[5rem]">
-            understand what we stand for
-          </h2>
-          
-        </div>
 
-        <div class="mt-8 lg:mt-10">
-          <div data-carousel="stories" class="story-track flex snap-x snap-mandatory gap-6 overflow-x-auto lg:grid lg:grid-cols-3 lg:overflow-visible">
-            <article class="group min-w-[84%] snap-start lg:min-w-0">
-              <a href="https://www.youtube.com/watch?v=Wp2kA5oI69I" target="_blank" rel="noreferrer" class="block">
-                <div class="relative overflow-hidden rounded-[28px] bg-white shadow-soft">
-                  <img src="images/story-sven.png" alt="Meet Sven, our Chief HR Officer" class="aspect-[0.82] w-full object-cover transition duration-500 group-hover:scale-[1.03]">
-                  <span class="play-button absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-jet-orange text-white shadow-[0_18px_30px_rgba(255,128,0,0.25)]">
-                    <svg class="ml-1 h-7 w-7" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M8 6.5v11l9-5.5L8 6.5Z"></path>
-                    </svg>
-                  </span>
-                </div>
-                <h3 class="mt-4 text-[1.9rem] font-black leading-tight tracking-[-0.04em] text-jet-charcoal lg:text-[2rem]">Meet Sven, our Chief HR Officer</h3>
-              </a>
-            </article>
-
-            <article class="group min-w-[84%] snap-start lg:min-w-0">
-              <a href="https://www.youtube.com/watch?v=MRShATwyDlU" target="_blank" rel="noreferrer" class="block">
-                <div class="relative overflow-hidden rounded-[28px] bg-white shadow-soft">
-                  <img src="images/story-jess.png" alt="Meet Jess, our Chief Product Officer" class="aspect-[0.82] w-full object-cover transition duration-500 group-hover:scale-[1.03]">
-                  <span class="play-button absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-jet-orange text-white shadow-[0_18px_30px_rgba(255,128,0,0.25)]">
-                    <svg class="ml-1 h-7 w-7" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M8 6.5v11l9-5.5L8 6.5Z"></path>
-                    </svg>
-                  </span>
-                </div>
-                <h3 class="mt-4 text-[1.9rem] font-black leading-tight tracking-[-0.04em] text-jet-charcoal lg:text-[2rem]">Meet Jess, our Chief Product Officer</h3>
-              </a>
-            </article>
-
-            <article class="group min-w-[84%] snap-start lg:min-w-0">
-              <a href="https://www.youtube.com/watch?v=WpbPYeGlVjA" target="_blank" rel="noreferrer" class="block">
-                <div class="relative overflow-hidden rounded-[28px] bg-white shadow-soft">
-                  <img src="images/story-empower.png" alt="Empowering everyday convenience" class="aspect-[0.82] w-full object-cover transition duration-500 group-hover:scale-[1.03]">
-                  <span class="play-button absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-jet-orange text-white shadow-[0_18px_30px_rgba(255,128,0,0.25)]">
-                    <svg class="ml-1 h-7 w-7" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M8 6.5v11l9-5.5L8 6.5Z"></path>
-                    </svg>
-                  </span>
-                </div>
-                <h3 class="mt-4 text-[1.9rem] font-black leading-tight tracking-[-0.04em] text-jet-charcoal lg:text-[2rem]">Empowering everyday convenience</h3>
-              </a>
-            </article>
-          </div>
-
-          <div class="mt-5 flex items-center justify-center gap-3 lg:hidden">
-            <button type="button" data-carousel-prev="stories" class="flex h-10 w-10 items-center justify-center rounded-full bg-jet-orange text-white shadow-soft" aria-label="Previous story">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M15 18 9 12l6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </button>
-            <span data-carousel-status="stories" class="text-sm font-bold uppercase tracking-[0.2em] text-jet-charcoal/60">1 / 3</span>
-            <button type="button" data-carousel-next="stories" class="flex h-10 w-10 items-center justify-center rounded-full bg-jet-orange text-white shadow-soft" aria-label="Next story">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <div class="bg-jet-cream pb-10 sm:pb-12">
       <div class="mx-auto flex max-w-[1440px] justify-center px-4 sm:px-6 lg:px-10">

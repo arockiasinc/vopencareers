@@ -53,7 +53,7 @@
     <div class="mx-auto max-w-[1440px] px-4 py-10 sm:px-6 lg:px-10 lg:py-14">
       <div class="flex flex-col gap-8 border-b border-jet-charcoal/45 pb-8 lg:flex-row lg:items-center lg:justify-between">
         <a href="#top" aria-label="Back to top">
-          <img src="images/logo.webp" alt="VOpen Market" class="h-12 w-auto sm:h-14">
+          <img src="<?php echo htmlspecialchars(buildAppPath('images/logo.webp'), ENT_QUOTES, 'UTF-8'); ?>" alt="VOpen Market" class="h-12 w-auto sm:h-14">
         </a>
 
         <div class="flex flex-wrap items-center gap-4">

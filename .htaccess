@@ -1,0 +1,4 @@
+RewriteEngine On
+
+RewriteRule ^jobs/?$ search-results.php [L]
+RewriteRule ^jobs/([^/]+)/?$ job-detail.php?slug=$1 [L,QSA]

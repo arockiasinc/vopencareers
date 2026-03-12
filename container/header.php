@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/job-links.php';
+
 $pageTitle = $pageTitle ?? 'Jobs & Careers at VOpen Market | Join Our Team';
 $pageDescription = $pageDescription ?? 'Discover career opportunities at VOpen Market. Join a team transforming how construction materials and products are sourced across Canada.';
 $currentPage = $currentPage ?? 'home';
@@ -16,27 +18,27 @@ $mainJsVersion = file_exists($assetRoot . '/js/main.js') ? filemtime($assetRoot 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
   <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
-  <link rel="icon" href="images/logo.webp">
+  <link rel="icon" href="<?php echo htmlspecialchars(buildAppPath('images/logo.webp'), ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/tailwind.css?v=<?php echo $tailwindVersion; ?>">
-  <link rel="stylesheet" href="css/style.css?v=<?php echo $styleVersion; ?>">
-  <script src="js/main.js?v=<?php echo $mainJsVersion; ?>" defer></script>
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(buildAppPath('css/tailwind.css?v=' . $tailwindVersion), ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(buildAppPath('css/style.css?v=' . $styleVersion), ENT_QUOTES, 'UTF-8'); ?>">
+  <script src="<?php echo htmlspecialchars(buildAppPath('js/main.js?v=' . $mainJsVersion), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 </head>
 <body class="<?php echo htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8'); ?>">
   <header class="<?php echo htmlspecialchars($headerClass, ENT_QUOTES, 'UTF-8'); ?>">
     <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-10">
-      <a href="index.php#top" class="shrink-0" aria-label="VOpen Market home">
-        <img src="images/logo.webp" alt="VOpen Market" class="hidden h-10 w-auto lg:block">
-        <img src="images/logo.webp" alt="VOpen Market" class="h-8 w-auto lg:hidden">
+      <a href="<?php echo htmlspecialchars(buildAppPath('index.php#top'), ENT_QUOTES, 'UTF-8'); ?>" class="shrink-0" aria-label="VOpen Market home">
+        <img src="<?php echo htmlspecialchars(buildAppPath('images/logo.webp'), ENT_QUOTES, 'UTF-8'); ?>" alt="VOpen Market" class="hidden h-10 w-auto lg:block">
+        <img src="<?php echo htmlspecialchars(buildAppPath('images/logo.webp'), ENT_QUOTES, 'UTF-8'); ?>" alt="VOpen Market" class="h-8 w-auto lg:hidden">
       </a>
 
       <nav class="hidden items-center gap-1 text-[17px] font-semibold text-jet-charcoal lg:flex" aria-label="Primary">
-        <a class="nav-link" href="index.php#top"<?php echo $currentPage === 'home' ? ' aria-current="page"' : ''; ?>>Home</a>
-        <a class="nav-link" href="search-results.php"<?php echo $currentPage === 'search' ? ' aria-current="page"' : ''; ?>>Search Jobs</a>
-        <a class="nav-link" href="index.php#culture">Teams</a>
-        <a class="nav-link" href="about-us.php"<?php echo $currentPage === 'about' ? ' aria-current="page"' : ''; ?>>Our Company</a>
+        <a class="nav-link" href="<?php echo htmlspecialchars(buildAppPath('index.php#top'), ENT_QUOTES, 'UTF-8'); ?>"<?php echo $currentPage === 'home' ? ' aria-current="page"' : ''; ?>>Home</a>
+        <a class="nav-link" href="<?php echo htmlspecialchars(buildAppPath('search-results.php'), ENT_QUOTES, 'UTF-8'); ?>"<?php echo $currentPage === 'search' ? ' aria-current="page"' : ''; ?>>Search Jobs</a>
+        <a class="nav-link" href="<?php echo htmlspecialchars(buildAppPath('index.php#culture'), ENT_QUOTES, 'UTF-8'); ?>">Teams</a>
+        <a class="nav-link" href="<?php echo htmlspecialchars(buildAppPath('about-us.php'), ENT_QUOTES, 'UTF-8'); ?>"<?php echo $currentPage === 'about' ? ' aria-current="page"' : ''; ?>>Our Company</a>
       </nav>
 
       <div class="hidden items-center gap-3 md:flex">
@@ -63,10 +65,10 @@ $mainJsVersion = file_exists($assetRoot . '/js/main.js') ? filemtime($assetRoot 
 
     <div id="mobile-menu" class="hidden border-t border-black/5 bg-white lg:hidden">
       <nav class="mx-auto flex max-w-[1440px] flex-col gap-2 px-4 py-5 text-lg font-semibold sm:px-6" aria-label="Mobile">
-        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="index.php#top"<?php echo $currentPage === 'home' ? ' aria-current="page"' : ''; ?>>Home</a>
-        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="search-results.php"<?php echo $currentPage === 'search' ? ' aria-current="page"' : ''; ?>>Search Jobs</a>
-        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="index.php#culture">Teams</a>
-        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="about-us.php"<?php echo $currentPage === 'about' ? ' aria-current="page"' : ''; ?>>Our Company</a>
+        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="<?php echo htmlspecialchars(buildAppPath('index.php#top'), ENT_QUOTES, 'UTF-8'); ?>"<?php echo $currentPage === 'home' ? ' aria-current="page"' : ''; ?>>Home</a>
+        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="<?php echo htmlspecialchars(buildAppPath('search-results.php'), ENT_QUOTES, 'UTF-8'); ?>"<?php echo $currentPage === 'search' ? ' aria-current="page"' : ''; ?>>Search Jobs</a>
+        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="<?php echo htmlspecialchars(buildAppPath('index.php#culture'), ENT_QUOTES, 'UTF-8'); ?>">Teams</a>
+        <a class="mobile-nav-link rounded-2xl px-4 py-3 transition hover:bg-white" href="<?php echo htmlspecialchars(buildAppPath('about-us.php'), ENT_QUOTES, 'UTF-8'); ?>"<?php echo $currentPage === 'about' ? ' aria-current="page"' : ''; ?>>Our Company</a>
 
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div class="inline-flex items-center justify-center gap-3 rounded-full border border-jet-charcoal/50 bg-white px-6 py-3 text-base font-semibold text-jet-charcoal">
