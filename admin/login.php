@@ -21,10 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($usernameValue === '' || $password === '') {
         $errorMessage = 'Enter both username and password.';
-    } elseif (attemptAdminLogin($usernameValue, $password)) {
-        redirectTo('index.php');
     } else {
-        $errorMessage = 'Invalid login details.';
+        try {
+            if (attemptAdminLogin($usernameValue, $password)) {
+                redirectTo('index.php');
+            }
+
+            $errorMessage = 'Invalid login details.';
+        } catch (Throwable $exception) {
+            $errorMessage = 'Admin users could not be loaded from the database. Check the admin_users table and database connection.';
+        }
     }
 }
 ?>

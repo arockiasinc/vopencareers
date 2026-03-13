@@ -1,4 +1,177 @@
-<?php include 'container/header.php'; ?>
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/admin/container/db.php';
+require_once __DIR__ . '/container/job-search.php';
+
+function escapeHomepageValue(?string $value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function buildHomepageCareerSearchUrl(string $categoryName): string
+{
+    $query = http_build_query(
+        ['category' => [$categoryName]],
+        '',
+        '&',
+        PHP_QUERY_RFC3986
+    );
+
+    return 'search-results.php' . ($query !== '' ? '?' . $query : '') . '#job-results';
+}
+
+function buildHomepageCareerCards(array $jobs): array
+{
+    $categoryCounts = [];
+
+    foreach ($jobs as $job) {
+        $seenCategoryNames = [];
+
+        foreach (($job['categories'] ?? []) as $category) {
+            $categoryName = trim((string) ($category['name'] ?? ''));
+
+            if ($categoryName === '' || isset($seenCategoryNames[$categoryName])) {
+                continue;
+            }
+
+            $seenCategoryNames[$categoryName] = true;
+            $categoryCounts[$categoryName] = ($categoryCounts[$categoryName] ?? 0) + 1;
+        }
+    }
+
+    if ($categoryCounts === []) {
+        return [];
+    }
+
+    $cards = [];
+
+    foreach ($categoryCounts as $categoryName => $jobCount) {
+        $cards[] = [
+            'name' => $categoryName,
+            'count' => (int) $jobCount,
+            'url' => buildHomepageCareerSearchUrl($categoryName),
+        ];
+    }
+
+    usort($cards, static function (array $left, array $right): int {
+        $countComparison = $right['count'] <=> $left['count'];
+
+        if ($countComparison !== 0) {
+            return $countComparison;
+        }
+
+        return strcasecmp((string) $left['name'], (string) $right['name']);
+    });
+
+    return $cards;
+}
+
+function buildHomepageCareerSlides(array $cards, int $cardsPerSlide = 4): array
+{
+    if ($cards === [] || $cardsPerSlide <= 0) {
+        return [];
+    }
+
+    return array_chunk($cards, $cardsPerSlide);
+}
+
+function renderHomepageCareerIcon(int $index): string
+{
+    static $icons = [
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <path d="M5 18h14M7.5 16v-3.5M12 16V10M16.5 16V6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+  <path d="M8 8.5h5.5M13.5 8.5V3M13.5 3l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <circle cx="8" cy="7.5" r="2.75" stroke="currentColor" stroke-width="1.8"></circle>
+  <circle cx="16" cy="7.5" r="2.75" stroke="currentColor" stroke-width="1.8"></circle>
+  <path d="M4.75 18.5v-1.75c0-2.2 1.78-4 4-4h.5c1.2 0 2.3.54 3.05 1.38c.75-.84 1.85-1.38 3.05-1.38h.5c2.22 0 4 1.8 4 4v1.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <rect x="5" y="6" width="14" height="10" rx="1.6" stroke="currentColor" stroke-width="1.8"></rect>
+  <path d="M9 20h6M7 16.5h10l1 2.5H6l1-2.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="m10 10 1.4 1.4 3.6-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <circle cx="7.5" cy="16" r="3" stroke="currentColor" stroke-width="1.8"></circle>
+  <circle cx="17" cy="16" r="3" stroke="currentColor" stroke-width="1.8"></circle>
+  <path d="M10.5 16h3.6l-2.1-6h-2.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M13.8 10h3l2 6M12.5 8.5l2.5-2.5M5 10h2.5M4.5 7.5h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <path d="M5 13a7 7 0 1 1 14 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+  <rect x="4.25" y="12" width="3.5" height="6" rx="1.5" stroke="currentColor" stroke-width="1.8"></rect>
+  <rect x="16.25" y="12" width="3.5" height="6" rx="1.5" stroke="currentColor" stroke-width="1.8"></rect>
+  <path d="M12 19.5h2.5a2 2 0 0 0 2-2V17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <path d="M5 18h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+  <rect x="6" y="11.5" width="2.75" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.8"></rect>
+  <rect x="10.625" y="8.5" width="2.75" height="7.5" rx="0.8" stroke="currentColor" stroke-width="1.8"></rect>
+  <rect x="15.25" y="6" width="2.75" height="10" rx="0.8" stroke="currentColor" stroke-width="1.8"></rect>
+  <path d="M6.9 8.2 10 5.8l2.8 1.6 4.1-3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <path d="M5 13.5V9.5c0-.5.4-.9.9-.9h2.4l5.7-2.9c.6-.3 1.3.1 1.3.8v10.9c0 .7-.7 1.1-1.3.8l-5.7-2.9H5.9c-.5 0-.9-.4-.9-.9Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M9 15.2 10.4 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+  <path d="M17.8 9.2c.9.7 1.4 1.7 1.4 2.8s-.5 2.1-1.4 2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+</svg>
+SVG,
+        <<<'SVG'
+<svg viewBox="0 0 24 24" fill="none">
+  <rect x="5" y="5" width="5" height="5" rx="1.1" stroke="currentColor" stroke-width="1.8"></rect>
+  <rect x="14" y="5" width="5" height="5" rx="1.1" stroke="currentColor" stroke-width="1.8"></rect>
+  <rect x="5" y="14" width="5" height="5" rx="1.1" stroke="currentColor" stroke-width="1.8"></rect>
+  <path d="M16.5 14v5M14 16.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+</svg>
+SVG,
+    ];
+
+    return $icons[$index % count($icons)];
+}
+
+$homepageSearchTerm = trim((string) ($_GET['keywords'] ?? ''));
+$homepageSearchValue = htmlspecialchars($homepageSearchTerm, ENT_QUOTES, 'UTF-8');
+$homepageSearchSuggestionsJson = '[]';
+$homepagePublishedJobs = [];
+$homepageCareerCards = [];
+$homepageCareerSlides = [];
+$homepageCareerSlideCount = 0;
+
+try {
+    $homepageJobRecords = fetchJobRecords();
+    $homepagePublishedJobs = array_values(array_filter(
+        $homepageJobRecords,
+        static fn(array $job): bool => (int) ($job['status'] ?? 0) === 1
+    ));
+    $homepageCareerCards = buildHomepageCareerCards($homepagePublishedJobs);
+    $homepageCareerSlides = buildHomepageCareerSlides($homepageCareerCards);
+    $homepageCareerSlideCount = count($homepageCareerSlides);
+    $homepageSearchSuggestions = buildSearchResultsSuggestions($homepagePublishedJobs);
+    $homepageSearchSuggestionsJson = json_encode(
+        $homepageSearchSuggestions,
+        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+    );
+} catch (Throwable $exception) {
+    $homepageSearchSuggestionsJson = '[]';
+}
+
+include 'container/header.php';
+?>
 <section class="bg-jet-cream">
       <div class="grid overflow-hidden lg:grid-cols-[1.03fr_0.97fr]">
         <div class="bg-jet-orange px-5 py-7 sm:px-8 sm:py-10 md:px-10 md:py-12 lg:px-14 lg:py-16 xl:px-16 xl:py-20">
@@ -9,11 +182,14 @@
 
             <form id="job-search-form" action="search-results.php" method="get" class="mt-8 flex flex-col gap-3 sm:flex-row" role="search" aria-label="Search jobs">
               <label for="job-search" class="sr-only">Search for job title</label>
-              <div class="relative flex-1">
+              <div class="search-autocomplete relative flex-1" data-search-autocomplete>
                 <svg class="pointer-events-none absolute left-6 top-1/2 h-7 w-7 -translate-y-1/2 text-jet-charcoal" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M11 5a6 6 0 1 0 0 12a6 6 0 0 0 0-12Zm8 14l-3.25-3.25" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
                 </svg>
-                <input id="job-search" name="keywords" type="search" placeholder="Search for job title" class="h-16 w-full rounded-full border-0 bg-white px-16 text-lg font-semibold text-jet-charcoal shadow-soft outline-none ring-0 placeholder:text-jet-charcoal/75 focus:outline-none focus:ring-2 focus:ring-white/70" autocomplete="off">
+                <input id="job-search" name="keywords" type="search" value="<?php echo $homepageSearchValue; ?>" placeholder="Search for job title" class="h-16 w-full rounded-full border-0 bg-white px-16 text-lg font-semibold text-jet-charcoal shadow-soft outline-none ring-0 placeholder:text-jet-charcoal/75 focus:outline-none focus:ring-2 focus:ring-white/70" autocomplete="off" aria-autocomplete="list" aria-controls="job-search-suggestions" aria-expanded="false" data-search-autocomplete-input>
+                <div id="job-search-suggestions" class="search-autocomplete-list" data-search-autocomplete-list role="listbox" hidden></div>
+                <p class="sr-only" data-search-autocomplete-status aria-live="polite"></p>
+                <script type="application/json" data-search-autocomplete-source><?php echo is_string($homepageSearchSuggestionsJson) ? $homepageSearchSuggestionsJson : '[]'; ?></script>
               </div>
               <button type="submit" class="search-submit-button h-16 rounded-full bg-jet-charcoal px-9 text-xl font-bold text-white transition hover:bg-black sm:min-w-[165px] lg:min-w-[190px]">
                 Search
@@ -341,37 +517,37 @@
 
     <section id="jet-at-a-glance" class="bg-jet-cream pb-14 sm:pb-16 lg:pb-20">
       <div class="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10">
-        <div class="overflow-hidden rounded-[34px] bg-[#c1dade]">
-          <div class="grid items-center gap-8 px-6 py-8 sm:px-8 md:grid-cols-[0.95fr_1.05fr] lg:px-12 lg:py-10 xl:px-14">
+        <div class="overflow-hidden rounded-[34px]" style="background-color:#ff5f1f;">
+          <div class="grid items-center gap-8 px-6 py-8 text-white sm:px-8 md:grid-cols-[0.95fr_1.05fr] lg:px-12 lg:py-10 xl:px-14">
             <div class="flex justify-center md:justify-start">
-              <img src="images/at-a-glance.png" alt="Fries in a Just Eat Takeaway container" class="w-full max-w-[420px] drop-shadow-[0_22px_34px_rgba(36,46,48,0.18)]">
+              <img src="images/project-folder.webp" alt="Fries in a Just Eat Takeaway container" class="w-full max-w-[420px] drop-shadow-[0_22px_34px_rgba(36,46,48,0.18)]">
             </div>
 
             <div>
-              <h2 class="jet-heading max-w-[11ch] text-[2.9rem] leading-[0.9] tracking-[-0.05em] text-jet-charcoal sm:text-[4rem] lg:text-[5.1rem]">
+              <h2 class="jet-heading max-w-[11ch] text-[2.9rem] leading-[0.9] tracking-[-0.05em] text-white sm:text-[4rem] lg:text-[5.1rem]">
                 Vopen Market
               </h2>
 
               <div class="mt-8 grid grid-cols-2 gap-x-7 gap-y-6 lg:grid-cols-3 lg:gap-x-10 lg:gap-y-8">
                 <div>
                   <p class="text-[3rem] font-black leading-none tracking-[-0.05em] lg:text-[4rem]">356 <span class="text-[0.7em]">k</span></p>
-                  <p class="mt-2 text-base font-semibold text-jet-charcoal/80 lg:text-lg">Partners</p>
+                  <p class="mt-2 text-base font-semibold text-white/80 lg:text-lg">Partners</p>
                 </div>
                 <div>
                   <p class="text-[3rem] font-black leading-none tracking-[-0.05em] lg:text-[4rem]">61 <span class="text-[0.7em]">m</span></p>
-                  <p class="mt-2 text-base font-semibold text-jet-charcoal/80 lg:text-lg">Active consumers</p>
+                  <p class="mt-2 text-base font-semibold text-white/80 lg:text-lg">Active consumers</p>
                 </div>
                 <div>
                   <p class="text-[3rem] font-black leading-none tracking-[-0.05em] lg:text-[4rem]">653 <span class="text-[0.7em]">m</span></p>
-                  <p class="mt-2 text-base font-semibold text-jet-charcoal/80 lg:text-lg">Orders</p>
+                  <p class="mt-2 text-base font-semibold text-white/80 lg:text-lg">Orders</p>
                 </div>
                 <div>
                   <p class="text-[3rem] font-black leading-none tracking-[-0.05em] lg:text-[4rem]">€19</p>
-                  <p class="mt-2 text-base font-semibold text-jet-charcoal/80 lg:text-lg">Gross transaction value</p>
+                  <p class="mt-2 text-base font-semibold text-white/80 lg:text-lg">Gross transaction value</p>
                 </div>
                 <div>
                   <p class="text-[3rem] font-black leading-none tracking-[-0.05em] lg:text-[4rem]">16</p>
-                  <p class="mt-2 text-base font-semibold text-jet-charcoal/80 lg:text-lg">Countries</p>
+                  <p class="mt-2 text-base font-semibold text-white/80 lg:text-lg">Countries</p>
                 </div>
               </div>
             </div>
@@ -387,128 +563,53 @@
         </h2>
 
         <div data-carousel="career-pages" class="career-pages-track">
-          <div class="career-pages-slide">
-            <div class="career-explorer-grid">
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M5 18h14M7.5 16v-3.5M12 16V10M16.5 16V6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                    <path d="M8 8.5h5.5M13.5 8.5V3M13.5 3l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Sales</h3>
-                <p class="career-explorer-card-copy">33 available jobs</p>
-              </a>
-
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <circle cx="8" cy="7.5" r="2.75" stroke="currentColor" stroke-width="1.8"></circle>
-                    <circle cx="16" cy="7.5" r="2.75" stroke="currentColor" stroke-width="1.8"></circle>
-                    <path d="M4.75 18.5v-1.75c0-2.2 1.78-4 4-4h.5c1.2 0 2.3.54 3.05 1.38c.75-.84 1.85-1.38 3.05-1.38h.5c2.22 0 4 1.8 4 4v1.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Corporate</h3>
-                <p class="career-explorer-card-copy">22 available jobs</p>
-              </a>
-
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <rect x="5" y="6" width="14" height="10" rx="1.6" stroke="currentColor" stroke-width="1.8"></rect>
-                    <path d="M9 20h6M7 16.5h10l1 2.5H6l1-2.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                    <path d="m10 10 1.4 1.4 3.6-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Tech &amp; Product</h3>
-                <p class="career-explorer-card-copy">24 available jobs</p>
-              </a>
-
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <circle cx="7.5" cy="16" r="3" stroke="currentColor" stroke-width="1.8"></circle>
-                    <circle cx="17" cy="16" r="3" stroke="currentColor" stroke-width="1.8"></circle>
-                    <path d="M10.5 16h3.6l-2.1-6h-2.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                    <path d="M13.8 10h3l2 6M12.5 8.5l2.5-2.5M5 10h2.5M4.5 7.5h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Operations &amp; Logistics</h3>
-                <p class="career-explorer-card-copy">17 available jobs</p>
-              </a>
+          <?php if ($homepageCareerSlides === []): ?>
+            <div class="career-pages-slide">
+              <div class="career-explorer-grid">
+                <div class="career-explorer-card">
+                  <span class="career-explorer-icon" aria-hidden="true">
+                    <?php echo renderHomepageCareerIcon(0); ?>
+                  </span>
+                  <h3 class="jet-heading career-explorer-card-title">Careers coming soon</h3>
+                  <p class="career-explorer-card-copy">Published categories will appear here automatically.</p>
+                </div>
+              </div>
             </div>
-          </div>
-
-          <div class="career-pages-slide">
-            <div class="career-explorer-grid">
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M5 13a7 7 0 1 1 14 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                    <rect x="4.25" y="12" width="3.5" height="6" rx="1.5" stroke="currentColor" stroke-width="1.8"></rect>
-                    <rect x="16.25" y="12" width="3.5" height="6" rx="1.5" stroke="currentColor" stroke-width="1.8"></rect>
-                    <path d="M12 19.5h2.5a2 2 0 0 0 2-2V17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Customer Service</h3>
-                <p class="career-explorer-card-copy">12 available jobs</p>
-              </a>
-
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M5 18h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                    <rect x="6" y="11.5" width="2.75" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.8"></rect>
-                    <rect x="10.625" y="8.5" width="2.75" height="7.5" rx="0.8" stroke="currentColor" stroke-width="1.8"></rect>
-                    <rect x="15.25" y="6" width="2.75" height="10" rx="0.8" stroke="currentColor" stroke-width="1.8"></rect>
-                    <path d="M6.9 8.2 10 5.8l2.8 1.6 4.1-3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Data &amp; Analytics</h3>
-                <p class="career-explorer-card-copy">13 available jobs</p>
-              </a>
-
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M5 13.5V9.5c0-.5.4-.9.9-.9h2.4l5.7-2.9c.6-.3 1.3.1 1.3.8v10.9c0 .7-.7 1.1-1.3.8l-5.7-2.9H5.9c-.5 0-.9-.4-.9-.9Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                    <path d="M9 15.2 10.4 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                    <path d="M17.8 9.2c.9.7 1.4 1.7 1.4 2.8s-.5 2.1-1.4 2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Marketing</h3>
-                <p class="career-explorer-card-copy">7 available jobs</p>
-              </a>
-
-              <a href="#" target="_blank" rel="noreferrer" class="career-explorer-card">
-                <span class="career-explorer-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <rect x="5" y="5" width="5" height="5" rx="1.1" stroke="currentColor" stroke-width="1.8"></rect>
-                    <rect x="14" y="5" width="5" height="5" rx="1.1" stroke="currentColor" stroke-width="1.8"></rect>
-                    <rect x="5" y="14" width="5" height="5" rx="1.1" stroke="currentColor" stroke-width="1.8"></rect>
-                    <path d="M16.5 14v5M14 16.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                  </svg>
-                </span>
-                <h3 class="jet-heading career-explorer-card-title">Other</h3>
-                <p class="career-explorer-card-copy">5 available jobs</p>
-              </a>
-            </div>
-          </div>
+          <?php else: ?>
+            <?php foreach ($homepageCareerSlides as $slideIndex => $homepageCareerSlide): ?>
+              <div class="career-pages-slide">
+                <div class="career-explorer-grid">
+                  <?php foreach ($homepageCareerSlide as $cardIndex => $homepageCareerCard): ?>
+                    <?php $iconIndex = ($slideIndex * 4) + $cardIndex; ?>
+                    <a href="<?php echo escapeHomepageValue((string) ($homepageCareerCard['url'] ?? 'search-results.php')); ?>" class="career-explorer-card" aria-label="<?php echo escapeHomepageValue('Browse ' . (string) ($homepageCareerCard['name'] ?? '') . ' jobs'); ?>">
+                      <span class="career-explorer-icon" aria-hidden="true">
+                        <?php echo renderHomepageCareerIcon($iconIndex); ?>
+                      </span>
+                      <h3 class="jet-heading career-explorer-card-title"><?php echo escapeHomepageValue((string) ($homepageCareerCard['name'] ?? '')); ?></h3>
+                      <p class="career-explorer-card-copy"><?php echo (int) ($homepageCareerCard['count'] ?? 0); ?> available job<?php echo (int) ($homepageCareerCard['count'] ?? 0) === 1 ? '' : 's'; ?></p>
+                    </a>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </div>
 
-        <div class="career-explorer-controls">
-          <button type="button" data-carousel-prev="career-pages" class="career-explorer-button" aria-label="Previous career category page">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M15 18 9 12l6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </button>
-          <span data-carousel-status="career-pages" class="career-explorer-status">1 / 2</span>
-          <button type="button" data-carousel-next="career-pages" class="career-explorer-button" aria-label="Next career category page">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </button>
-        </div>
+        <?php if ($homepageCareerSlideCount > 1): ?>
+          <div class="career-explorer-controls">
+            <button type="button" data-carousel-prev="career-pages" class="career-explorer-button" aria-label="Previous career category page">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M15 18 9 12l6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+            <span data-carousel-status="career-pages" class="career-explorer-status">1 / <?php echo $homepageCareerSlideCount; ?></span>
+            <button type="button" data-carousel-next="career-pages" class="career-explorer-button" aria-label="Next career category page">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+          </div>
+        <?php endif; ?>
       </div>
     </section>
 

@@ -6,6 +6,12 @@ $pageDescription = $pageDescription ?? 'Discover career opportunities at VOpen M
 $currentPage = $currentPage ?? 'home';
 $bodyClass = trim('font-jet text-jet-charcoal antialiased ' . ($bodyClass ?? ''));
 $headerClass = $headerClass ?? 'sticky top-0 z-50 border-b border-black/5 bg-white';
+$savedJobsHref = buildAppPath('jobcart.php');
+$savedJobsButtonClass = 'saved-jobs-button rounded-full bg-jet-charcoal px-6 py-3 text-[17px] font-semibold text-white transition hover:bg-black';
+
+if ($currentPage === 'jobcart') {
+  $savedJobsButtonClass .= ' is-current';
+}
 $assetRoot = dirname(__DIR__);
 $tailwindVersion = file_exists($assetRoot . '/css/tailwind.css') ? filemtime($assetRoot . '/css/tailwind.css') : time();
 $styleVersion = file_exists($assetRoot . '/css/style.css') ? filemtime($assetRoot . '/css/style.css') : time();
@@ -49,8 +55,9 @@ $mainJsVersion = file_exists($assetRoot . '/js/main.js') ? filemtime($assetRoot 
           </svg>
           <span>English</span>
         </div>
-        <a href="#" target="_blank" rel="noreferrer" class="saved-jobs-button rounded-full bg-jet-charcoal px-6 py-3 text-[17px] font-semibold text-white transition hover:bg-black">
-          Saved Jobs (0)
+        <a href="<?php echo htmlspecialchars($savedJobsHref, ENT_QUOTES, 'UTF-8'); ?>" class="<?php echo htmlspecialchars($savedJobsButtonClass, ENT_QUOTES, 'UTF-8'); ?>" data-saved-jobs-link aria-label="Saved Jobs (0)">
+          <span>Saved Jobs</span>
+          <span class="saved-jobs-count-badge" data-saved-jobs-count>0</span>
         </a>
       </div>
 
@@ -78,8 +85,9 @@ $mainJsVersion = file_exists($assetRoot . '/js/main.js') ? filemtime($assetRoot 
             </svg>
             <span>English</span>
           </div>
-          <a href="#" target="_blank" rel="noreferrer" class="saved-jobs-button rounded-full bg-jet-charcoal px-6 py-3 text-center text-base font-semibold text-white">
-            Saved Jobs (0)
+          <a href="<?php echo htmlspecialchars($savedJobsHref, ENT_QUOTES, 'UTF-8'); ?>" class="<?php echo htmlspecialchars($savedJobsButtonClass, ENT_QUOTES, 'UTF-8'); ?> text-center text-base" data-saved-jobs-link aria-label="Saved Jobs (0)">
+            <span>Saved Jobs</span>
+            <span class="saved-jobs-count-badge" data-saved-jobs-count>0</span>
           </a>
         </div>
       </nav>

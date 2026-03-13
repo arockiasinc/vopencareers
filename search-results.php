@@ -8,6 +8,7 @@ $bodyClass = 'bg-jet-cream';
 $headerClass = 'sticky top-0 z-50 border-b border-black/5 bg-white site-header-elevated';
 
 require_once __DIR__ . '/admin/container/db.php';
+require_once __DIR__ . '/container/job-search.php';
 require_once __DIR__ . '/container/job-links.php';
 
 function escapeSearchResultsValue(?string $value): string
@@ -94,30 +95,6 @@ function normalizeSearchResultsFilterInput(mixed $value): array
     return array_keys($normalized);
 }
 
-function parseSearchResultsLocations(string $value): array
-{
-    $value = trim($value);
-
-    if ($value === '') {
-        return [];
-    }
-
-    $parts = preg_split('/\s*,\s*/', $value) ?: [];
-    $locations = [];
-
-    foreach ($parts as $part) {
-        $part = trim((string) $part);
-
-        if ($part === '') {
-            continue;
-        }
-
-        $locations[$part] = true;
-    }
-
-    return array_keys($locations);
-}
-
 function normalizeSearchResultsLocationFilterInput(mixed $value): array
 {
     $normalized = [];
@@ -131,62 +108,12 @@ function normalizeSearchResultsLocationFilterInput(mixed $value): array
     return array_keys($normalized);
 }
 
-function getSearchResultsJobLocations(array $job): array
-{
-    $locations = parseSearchResultsLocations((string) ($job['location'] ?? ''));
-
-    return $locations === [] ? ['Unspecified'] : $locations;
-}
-
-function normalizeSearchResultsSuggestionKey(string $value): string
-{
-    $value = trim($value);
-
-    if ($value === '') {
-        return '';
-    }
-
-    if (function_exists('mb_strtolower')) {
-        return mb_strtolower($value, 'UTF-8');
-    }
-
-    return strtolower($value);
-}
-
-function buildSearchResultsSuggestions(array $jobs): array
-{
-    $suggestions = [];
-
-    foreach ($jobs as $job) {
-        $values = [
-            trim((string) ($job['title'] ?? '')),
-        ];
-
-        foreach (getSearchResultsJobLocations($job) as $location) {
-            if ($location !== 'Unspecified') {
-                $values[] = $location;
-            }
-        }
-
-        foreach ($values as $value) {
-            $key = normalizeSearchResultsSuggestionKey($value);
-
-            if ($key === '' || array_key_exists($key, $suggestions)) {
-                continue;
-            }
-
-            $suggestions[$key] = $value;
-        }
-    }
-
-    return array_values($suggestions);
-}
-
 function searchResultsJobMatchesKeyword(array $job, string $searchTerm): bool
 {
     $haystack = implode(' ', array_filter([
         trim((string) ($job['title'] ?? '')),
         trim((string) ($job['location'] ?? '')),
+        trim((string) ($job['categories_label'] ?? '')),
         trim((string) ($job['description'] ?? '')),
         trim((string) ($job['created_at'] ?? '')),
     ], static fn(string $value): bool => $value !== ''));
@@ -194,12 +121,25 @@ function searchResultsJobMatchesKeyword(array $job, string $searchTerm): bool
     return stripos($haystack, $searchTerm) !== false;
 }
 
-function searchResultsJobMatchesFilters(array $job, array $selectedLocations, array $selectedPublishedMonths): bool
+function searchResultsJobMatchesFilters(
+    array $job,
+    array $selectedLocations,
+    array $selectedCategories,
+    array $selectedPublishedMonths
+): bool
 {
     if ($selectedLocations !== []) {
         $jobLocations = getSearchResultsJobLocations($job);
 
         if (array_intersect($jobLocations, $selectedLocations) === []) {
+            return false;
+        }
+    }
+
+    if ($selectedCategories !== []) {
+        $jobCategories = getSearchResultsJobCategories($job);
+
+        if (array_intersect($jobCategories, $selectedCategories) === []) {
             return false;
         }
     }
@@ -273,6 +213,7 @@ function buildSearchResultsPaginationUrl(
     int $page,
     string $searchTerm,
     array $selectedLocations,
+    array $selectedCategories,
     array $selectedPublishedMonths
 ): string {
     $parameters = [];
@@ -283,6 +224,10 @@ function buildSearchResultsPaginationUrl(
 
     if ($selectedLocations !== []) {
         $parameters['location'] = array_values($selectedLocations);
+    }
+
+    if ($selectedCategories !== []) {
+        $parameters['category'] = array_values($selectedCategories);
     }
 
     if ($selectedPublishedMonths !== []) {
@@ -300,6 +245,7 @@ function buildSearchResultsPaginationUrl(
 
 $searchTerm = trim((string) ($_GET['keywords'] ?? ''));
 $selectedLocations = normalizeSearchResultsLocationFilterInput($_GET['location'] ?? null);
+$selectedCategories = normalizeSearchResultsFilterInput($_GET['category'] ?? null);
 $selectedPublishedMonths = normalizeSearchResultsFilterInput($_GET['published'] ?? null);
 $currentResultsPage = readSearchResultsPositiveInt($_GET['page'] ?? null) ?? 1;
 $pageError = '';
@@ -332,10 +278,16 @@ if ($searchTerm !== '') {
 
 $jobs = array_values(array_filter(
     $searchScopedJobs,
-    static fn(array $job): bool => searchResultsJobMatchesFilters($job, $selectedLocations, $selectedPublishedMonths)
+    static fn(array $job): bool => searchResultsJobMatchesFilters(
+        $job,
+        $selectedLocations,
+        $selectedCategories,
+        $selectedPublishedMonths
+    )
 ));
 
 $locationCounts = [];
+$categoryCounts = [];
 $publishedCounts = [];
 
 foreach ($searchScopedJobs as $job) {
@@ -343,11 +295,16 @@ foreach ($searchScopedJobs as $job) {
         $locationCounts[$locationLabel] = ($locationCounts[$locationLabel] ?? 0) + 1;
     }
 
+    foreach (getSearchResultsJobCategories($job) as $categoryLabel) {
+        $categoryCounts[$categoryLabel] = ($categoryCounts[$categoryLabel] ?? 0) + 1;
+    }
+
     $publishedLabel = formatSearchResultsMonth((string) ($job['created_at'] ?? ''));
     $publishedCounts[$publishedLabel] = ($publishedCounts[$publishedLabel] ?? 0) + 1;
 }
 
 $locationFilters = buildSearchResultsFilters($locationCounts, $selectedLocations);
+$categoryFilters = buildSearchResultsFilters($categoryCounts, $selectedCategories);
 $publishedFilters = buildSearchResultsFilters($publishedCounts, $selectedPublishedMonths);
 
 $jobsPerPage = 7;
@@ -363,7 +320,7 @@ $visibleJobs = array_slice($jobs, $jobsOffset, $jobsPerPage);
 $hasPagination = $jobCount > $jobsPerPage;
 $jobLabel = $jobCount === 1 ? 'job' : 'jobs';
 $searchValue = escapeSearchResultsValue($searchTerm);
-$hasActiveFilters = $selectedLocations !== [] || $selectedPublishedMonths !== [];
+$hasActiveFilters = $selectedLocations !== [] || $selectedCategories !== [] || $selectedPublishedMonths !== [];
 $isPublishedSectionOpen = $selectedPublishedMonths !== [];
 
 $emptyStateTitle = 'No jobs have been published yet';
@@ -407,6 +364,9 @@ include 'container/header.php';
           </div>
           <?php foreach ($selectedLocations as $selectedLocation): ?>
             <input type="hidden" name="location[]" value="<?php echo escapeSearchResultsValue($selectedLocation); ?>">
+          <?php endforeach; ?>
+          <?php foreach ($selectedCategories as $selectedCategory): ?>
+            <input type="hidden" name="category[]" value="<?php echo escapeSearchResultsValue($selectedCategory); ?>">
           <?php endforeach; ?>
           <?php foreach ($selectedPublishedMonths as $selectedPublishedMonth): ?>
             <input type="hidden" name="published[]" value="<?php echo escapeSearchResultsValue($selectedPublishedMonth); ?>">
@@ -475,6 +435,32 @@ include 'container/header.php';
                     <li class="search-filter-option">
                       <label>
                         <input type="checkbox" name="location[]" value="<?php echo escapeSearchResultsValue($filter['label']); ?>"<?php echo $filter['checked'] ? ' checked' : ''; ?>>
+                        <span><?php echo escapeSearchResultsValue($filter['label']); ?></span>
+                        <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
+                      </label>
+                    </li>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </ul>
+            </div>
+
+            <div class="search-filter-block">
+              <p class="search-filter-label">Categories</p>
+
+              <ul class="search-filter-list">
+                <?php if ($categoryFilters === []): ?>
+                  <li class="search-filter-option">
+                    <label>
+                      <input type="checkbox" disabled>
+                      <span>No published categories yet</span>
+                      <span class="search-filter-count">0</span>
+                    </label>
+                  </li>
+                <?php else: ?>
+                  <?php foreach ($categoryFilters as $filter): ?>
+                    <li class="search-filter-option">
+                      <label>
+                        <input type="checkbox" name="category[]" value="<?php echo escapeSearchResultsValue($filter['label']); ?>"<?php echo $filter['checked'] ? ' checked' : ''; ?>>
                         <span><?php echo escapeSearchResultsValue($filter['label']); ?></span>
                         <span class="search-filter-count"><?php echo (int) $filter['count']; ?></span>
                       </label>
@@ -580,6 +566,9 @@ include 'container/header.php';
                     <?php if (trim((string) ($job['location'] ?? '')) !== ''): ?>
                       <span class="search-job-pill"><?php echo escapeSearchResultsValue((string) $job['location']); ?></span>
                     <?php endif; ?>
+                    <?php foreach (getSearchResultsJobCategories($job) as $categoryLabel): ?>
+                      <span class="search-job-pill"><?php echo escapeSearchResultsValue($categoryLabel); ?></span>
+                    <?php endforeach; ?>
                     <span class="search-job-pill">Open role</span>
                     <span class="search-job-pill"><?php echo escapeSearchResultsValue(formatSearchResultsDate((string) ($job['created_at'] ?? ''))); ?></span>
                   </div>
@@ -600,7 +589,7 @@ include 'container/header.php';
             <?php if ($hasPagination): ?>
               <nav class="search-pagination" aria-label="Search result pages">
                 <?php if ($currentResultsPage > 1): ?>
-                  <a href="<?php echo escapeSearchResultsValue(buildSearchResultsPaginationUrl($currentResultsPage - 1, $searchTerm, $selectedLocations, $selectedPublishedMonths)); ?>" class="search-pagination-link" aria-label="Go to previous results page">
+                  <a href="<?php echo escapeSearchResultsValue(buildSearchResultsPaginationUrl($currentResultsPage - 1, $searchTerm, $selectedLocations, $selectedCategories, $selectedPublishedMonths)); ?>" class="search-pagination-link" aria-label="Go to previous results page">
                     Previous
                   </a>
                 <?php else: ?>
@@ -609,7 +598,7 @@ include 'container/header.php';
 
                 <?php for ($page = 1; $page <= $totalResultsPages; $page++): ?>
                   <a
-                    href="<?php echo escapeSearchResultsValue(buildSearchResultsPaginationUrl($page, $searchTerm, $selectedLocations, $selectedPublishedMonths)); ?>"
+                    href="<?php echo escapeSearchResultsValue(buildSearchResultsPaginationUrl($page, $searchTerm, $selectedLocations, $selectedCategories, $selectedPublishedMonths)); ?>"
                     class="search-pagination-link<?php echo $page === $currentResultsPage ? ' is-active' : ''; ?>"
                     <?php echo $page === $currentResultsPage ? ' aria-current="page"' : ''; ?>
                     aria-label="Go to results page <?php echo $page; ?>"
@@ -619,7 +608,7 @@ include 'container/header.php';
                 <?php endfor; ?>
 
                 <?php if ($currentResultsPage < $totalResultsPages): ?>
-                  <a href="<?php echo escapeSearchResultsValue(buildSearchResultsPaginationUrl($currentResultsPage + 1, $searchTerm, $selectedLocations, $selectedPublishedMonths)); ?>" class="search-pagination-link" aria-label="Go to next results page">
+                  <a href="<?php echo escapeSearchResultsValue(buildSearchResultsPaginationUrl($currentResultsPage + 1, $searchTerm, $selectedLocations, $selectedCategories, $selectedPublishedMonths)); ?>" class="search-pagination-link" aria-label="Go to next results page">
                     Next
                   </a>
                 <?php else: ?>

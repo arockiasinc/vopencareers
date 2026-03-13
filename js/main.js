@@ -3,6 +3,472 @@ const filterForm = document.querySelector("[data-search-filter-form]");
 const menuToggle = document.getElementById("menu-toggle");
 const mobileMenu = document.getElementById("mobile-menu");
 const normalizeSearchInputValue = (value) => value.trim();
+const savedJobsStorageKey = "vopen.savedJobs";
+const sanitizeSavedJobString = (value) => (typeof value === "string" ? value.trim() : "");
+const normalizeSavedJobUrl = (value) => {
+  const normalizedUrl = sanitizeSavedJobString(value);
+
+  if (normalizedUrl === "") {
+    return "";
+  }
+
+  try {
+    const resolvedUrl = new URL(normalizedUrl, window.location.origin);
+
+    if (!["http:", "https:"].includes(resolvedUrl.protocol)) {
+      return "";
+    }
+
+    return normalizedUrl;
+  } catch (error) {
+    return "";
+  }
+};
+
+const uniqueSavedJobValues = (values) =>
+  Array.from(
+    new Set(values.map((value) => sanitizeSavedJobString(value)).filter((value) => value !== ""))
+  );
+
+const buildSavedJobKey = (job) => {
+  const numericId = Number.parseInt(String(job?.id ?? ""), 10);
+
+  if (Number.isFinite(numericId) && numericId > 0) {
+    return `job-${numericId}`;
+  }
+
+  const jobUrl = normalizeSavedJobUrl(job?.url);
+
+  if (jobUrl !== "") {
+    return jobUrl;
+  }
+
+  const jobTitle = sanitizeSavedJobString(job?.title);
+
+  return jobTitle !== "" ? jobTitle.toLocaleLowerCase() : "";
+};
+
+const normalizeSavedJob = (job) => {
+  if (!job || typeof job !== "object") {
+    return null;
+  }
+
+  const key = buildSavedJobKey(job);
+  const title = sanitizeSavedJobString(job.title);
+
+  if (key === "" || title === "") {
+    return null;
+  }
+
+  const numericId = Number.parseInt(String(job.id ?? ""), 10);
+  const savedAt = Number.parseInt(String(job.savedAt ?? ""), 10);
+
+  return {
+    key,
+    id: Number.isFinite(numericId) && numericId > 0 ? numericId : null,
+    title,
+    location: sanitizeSavedJobString(job.location),
+    categories: uniqueSavedJobValues(Array.isArray(job.categories) ? job.categories : []),
+    postedLabel: sanitizeSavedJobString(job.postedLabel),
+    summary: sanitizeSavedJobString(job.summary),
+    url: normalizeSavedJobUrl(job.url),
+    savedAt: Number.isFinite(savedAt) && savedAt > 0 ? savedAt : Date.now(),
+  };
+};
+
+const readSavedJobs = () => {
+  try {
+    const storedValue = window.localStorage.getItem(savedJobsStorageKey);
+
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    const jobs = parsedValue.map((item) => normalizeSavedJob(item)).filter(Boolean);
+    const seenKeys = new Set();
+
+    return jobs.filter((job) => {
+      if (seenKeys.has(job.key)) {
+        return false;
+      }
+
+      seenKeys.add(job.key);
+      return true;
+    });
+  } catch (error) {
+    return [];
+  }
+};
+
+const writeSavedJobs = (jobs) => {
+  try {
+    window.localStorage.setItem(savedJobsStorageKey, JSON.stringify(jobs));
+  } catch (error) {
+    // Ignore storage errors and keep the page usable.
+  }
+};
+
+const findSavedJobIndex = (savedJobs, key) => savedJobs.findIndex((job) => job.key === key);
+
+const toggleSavedJob = (job) => {
+  const normalizedJob = normalizeSavedJob(job);
+
+  if (!normalizedJob) {
+    return {
+      savedJobs: readSavedJobs(),
+      isSaved: false,
+    };
+  }
+
+  const savedJobs = readSavedJobs();
+  const existingIndex = findSavedJobIndex(savedJobs, normalizedJob.key);
+
+  if (existingIndex >= 0) {
+    savedJobs.splice(existingIndex, 1);
+    writeSavedJobs(savedJobs);
+
+    return {
+      savedJobs,
+      isSaved: false,
+    };
+  }
+
+  savedJobs.unshift({
+    ...normalizedJob,
+    savedAt: Date.now(),
+  });
+  writeSavedJobs(savedJobs);
+
+  return {
+    savedJobs,
+    isSaved: true,
+  };
+};
+
+const removeSavedJobByKey = (key) => {
+  if (sanitizeSavedJobString(key) === "") {
+    return readSavedJobs();
+  }
+
+  const nextJobs = readSavedJobs().filter((job) => job.key !== key);
+  writeSavedJobs(nextJobs);
+
+  return nextJobs;
+};
+
+const clearSavedJobs = () => {
+  writeSavedJobs([]);
+  return [];
+};
+
+const buildAbsoluteSavedJobUrl = (jobUrl) => {
+  const normalizedUrl = sanitizeSavedJobString(jobUrl);
+
+  if (normalizedUrl === "") {
+    return window.location.href;
+  }
+
+  try {
+    return new URL(normalizedUrl, window.location.origin).toString();
+  } catch (error) {
+    return normalizedUrl;
+  }
+};
+
+const buildApplyHref = (job) => {
+  const normalizedJob = normalizeSavedJob(job);
+
+  if (!normalizedJob) {
+    return "mailto:";
+  }
+
+  const subject = `Application for ${normalizedJob.title} | VOpen Market`;
+  const bodyLines = [
+    "Hello,",
+    "",
+    `I would like to apply for the ${normalizedJob.title} role at VOpen Market.`,
+  ];
+
+  if (normalizedJob.location !== "") {
+    bodyLines.push(`Location: ${normalizedJob.location}`);
+  }
+
+  bodyLines.push(`Job link: ${buildAbsoluteSavedJobUrl(normalizedJob.url)}`);
+  bodyLines.push("");
+  bodyLines.push("Thank you.");
+
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+};
+
+const formatSavedDate = (timestamp) => {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "Saved recently";
+  }
+
+  try {
+    return `Saved ${new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(timestamp))}`;
+  } catch (error) {
+    return "Saved recently";
+  }
+};
+
+const parseSavedJobData = (element) => {
+  const serializedJob = sanitizeSavedJobString(element?.dataset?.job);
+
+  if (serializedJob === "") {
+    return null;
+  }
+
+  try {
+    return normalizeSavedJob(JSON.parse(serializedJob));
+  } catch (error) {
+    return null;
+  }
+};
+
+const updateSavedJobsUi = () => {
+  const savedJobs = readSavedJobs();
+  const savedJobsCount = savedJobs.length;
+
+  document.querySelectorAll("[data-saved-jobs-count]").forEach((countNode) => {
+    countNode.textContent = String(savedJobsCount);
+  });
+
+  document.querySelectorAll("[data-saved-jobs-link]").forEach((link) => {
+    link.classList.toggle("has-saved-jobs", savedJobsCount > 0);
+    link.setAttribute("aria-label", `Saved Jobs (${savedJobsCount})`);
+  });
+
+  document.querySelectorAll("[data-jobcart-total]").forEach((countNode) => {
+    countNode.textContent = String(savedJobsCount);
+  });
+
+  document.querySelectorAll("[data-clear-saved-jobs]").forEach((button) => {
+    button.hidden = savedJobsCount === 0;
+  });
+};
+
+const syncSaveJobButtons = () => {
+  const savedJobs = readSavedJobs();
+
+  document.querySelectorAll("[data-save-job]").forEach((button) => {
+    const job = parseSavedJobData(button);
+
+    if (!job) {
+      return;
+    }
+
+    const isSaved = findSavedJobIndex(savedJobs, job.key) >= 0;
+    const buttonLabel = button.dataset.saveJobLabel || "Save Job";
+    const savedLabel = button.dataset.savedLabel || "Saved";
+    const labelTarget = button.querySelector("[data-save-job-text]");
+
+    button.classList.toggle("is-saved", isSaved);
+    button.setAttribute("aria-pressed", String(isSaved));
+    button.dataset.jobKey = job.key;
+
+    if (labelTarget) {
+      labelTarget.textContent = isSaved ? savedLabel : buttonLabel;
+    }
+  });
+
+  document.querySelectorAll("[data-apply-job]").forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+
+    const job = parseSavedJobData(link);
+
+    if (!job) {
+      return;
+    }
+
+    link.href = buildApplyHref(job);
+  });
+};
+
+const createJobcartCard = (job) => {
+  const card = document.createElement("article");
+  const main = document.createElement("div");
+  const title = document.createElement("h3");
+  const meta = document.createElement("div");
+  const summary = document.createElement("p");
+  const footer = document.createElement("div");
+  const savedNote = document.createElement("span");
+  const actions = document.createElement("div");
+  const applyLink = document.createElement("a");
+  const removeButton = document.createElement("button");
+  const normalizedUrl = sanitizeSavedJobString(job.url);
+
+  card.className = "jobcart-card";
+  main.className = "jobcart-card-main";
+  title.className = "jet-heading jobcart-card-title";
+  meta.className = "jobcart-card-meta";
+  summary.className = "jobcart-card-copy";
+  footer.className = "jobcart-card-footer";
+  savedNote.className = "jobcart-saved-note";
+  actions.className = "jobcart-card-actions";
+  applyLink.className = "jobcart-apply-link";
+  applyLink.href = buildApplyHref(job);
+  applyLink.textContent = "Apply";
+  removeButton.type = "button";
+  removeButton.className = "jobcart-remove-button";
+  removeButton.dataset.removeSavedJob = job.key;
+  removeButton.textContent = "Remove";
+  savedNote.textContent = formatSavedDate(job.savedAt);
+
+  if (normalizedUrl !== "") {
+    const titleLink = document.createElement("a");
+
+    titleLink.href = normalizedUrl;
+    titleLink.className = "jobcart-card-link";
+    titleLink.textContent = job.title;
+    title.appendChild(titleLink);
+  } else {
+    title.textContent = job.title;
+  }
+
+  if (job.location !== "") {
+    const locationPill = document.createElement("span");
+
+    locationPill.className = "jobcart-pill is-location";
+    locationPill.textContent = job.location;
+    meta.appendChild(locationPill);
+  }
+
+  job.categories.forEach((category) => {
+    const categoryPill = document.createElement("span");
+
+    categoryPill.className = "jobcart-pill";
+    categoryPill.textContent = category;
+    meta.appendChild(categoryPill);
+  });
+
+  if (job.postedLabel !== "") {
+    const postedPill = document.createElement("span");
+
+    postedPill.className = "jobcart-pill";
+    postedPill.textContent = job.postedLabel;
+    meta.appendChild(postedPill);
+  }
+
+  summary.textContent = job.summary || "Return to the job detail page to review the full description and responsibilities.";
+
+  if (normalizedUrl !== "") {
+    const viewLink = document.createElement("a");
+
+    viewLink.href = normalizedUrl;
+    viewLink.className = "jobcart-view-link";
+    viewLink.textContent = "View job";
+    actions.appendChild(viewLink);
+  }
+
+  actions.prepend(applyLink);
+  actions.appendChild(removeButton);
+  main.append(title, meta, summary);
+  footer.append(savedNote, actions);
+  card.append(main, footer);
+
+  return card;
+};
+
+const renderJobCart = () => {
+  const cartList = document.querySelector("[data-jobcart-list]");
+  const emptyState = document.querySelector("[data-jobcart-empty]");
+
+  if (!(cartList instanceof HTMLElement) || !(emptyState instanceof HTMLElement)) {
+    return;
+  }
+
+  const savedJobs = readSavedJobs().sort((leftJob, rightJob) => rightJob.savedAt - leftJob.savedAt);
+
+  cartList.replaceChildren();
+
+  if (savedJobs.length === 0) {
+    emptyState.hidden = false;
+    cartList.hidden = true;
+    return;
+  }
+
+  emptyState.hidden = true;
+  cartList.hidden = false;
+
+  const fragment = document.createDocumentFragment();
+
+  savedJobs.forEach((job) => {
+    fragment.appendChild(createJobcartCard(job));
+  });
+
+  cartList.appendChild(fragment);
+};
+
+const refreshSavedJobsExperience = () => {
+  updateSavedJobsUi();
+  syncSaveJobButtons();
+  renderJobCart();
+};
+
+document.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const saveJobButton = event.target.closest("[data-save-job]");
+
+  if (saveJobButton instanceof HTMLButtonElement) {
+    const job = parseSavedJobData(saveJobButton);
+
+    if (!job) {
+      return;
+    }
+
+    event.preventDefault();
+    toggleSavedJob(job);
+    refreshSavedJobsExperience();
+    return;
+  }
+
+  const removeButton = event.target.closest("[data-remove-saved-job]");
+
+  if (removeButton instanceof HTMLButtonElement) {
+    const jobKey = sanitizeSavedJobString(removeButton.dataset.removeSavedJob);
+
+    if (jobKey === "") {
+      return;
+    }
+
+    removeSavedJobByKey(jobKey);
+    refreshSavedJobsExperience();
+    return;
+  }
+
+  const clearButton = event.target.closest("[data-clear-saved-jobs]");
+
+  if (clearButton instanceof HTMLButtonElement) {
+    clearSavedJobs();
+    refreshSavedJobsExperience();
+  }
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== null && event.key !== savedJobsStorageKey) {
+    return;
+  }
+
+  refreshSavedJobsExperience();
+});
+
+refreshSavedJobsExperience();
 
 if (searchForm) {
   searchForm.addEventListener("submit", () => {

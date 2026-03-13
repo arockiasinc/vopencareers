@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/auth.php';
-require __DIR__ . '/container/db.php';
+require_once __DIR__ . '/container/db.php';
 
 requireAdminAuth();
 
@@ -12,11 +12,13 @@ $formValues = [
     'title' => '',
     'location' => '',
     'description' => '',
+    'category_ids' => [],
 ];
 $fieldErrors = [
     'title' => '',
     'location' => '',
     'description' => '',
+    'categories' => '',
 ];
 $pageError = '';
 $successMessage = '';
@@ -25,11 +27,36 @@ $editJob = null;
 $editJobId = readPositiveInt($_GET['edit'] ?? null);
 $currentJobsPage = readPositiveInt($_GET['jobs_page'] ?? $_POST['jobs_page'] ?? null) ?? 1;
 
-if (isset($_SESSION['job_flash']) && is_array($_SESSION['job_flash'])) {
+if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
+    $flash = $_SESSION['admin_flash'];
+    $successMessage = (string) ($flash['message'] ?? '');
+    unset($_SESSION['admin_flash']);
+} elseif (isset($_SESSION['job_flash']) && is_array($_SESSION['job_flash'])) {
     $flash = $_SESSION['job_flash'];
     $successMessage = (string) ($flash['message'] ?? '');
     unset($_SESSION['job_flash']);
 }
+
+$categories = [];
+$categoryIdLookup = [];
+
+try {
+    $categories = fetchCategoryRecords();
+
+    foreach ($categories as $category) {
+        $categoryId = (int) ($category['id'] ?? 0);
+
+        if ($categoryId <= 0) {
+            continue;
+        }
+
+        $categoryIdLookup[$categoryId] = (string) ($category['name'] ?? '');
+    }
+} catch (Throwable $exception) {
+    $pageError = 'The categories list could not be loaded. Check the database connection and confirm category tables can be created.';
+}
+
+$allowedCategoryIds = array_keys($categoryIdLookup);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $jobAction = (string) ($_POST['job_action'] ?? 'create');
@@ -52,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     deleteJobRecord($deleteJobId);
 
-                    $_SESSION['job_flash'] = [
+                    $_SESSION['admin_flash'] = [
                         'message' => sprintf('"%s" was deleted.', (string) $jobToDelete['title']),
                     ];
 
@@ -82,10 +109,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $selectedLocations = normalizeLocationSelection($_POST['location'] ?? null, $allowedLocations);
+        $selectedCategoryIds = normalizeCategorySelection($_POST['category_id'] ?? null, $allowedCategoryIds);
 
         $formValues['title'] = trim((string) ($_POST['title'] ?? ''));
         $formValues['location'] = formatLocationSelection($selectedLocations);
         $formValues['description'] = trim((string) ($_POST['description'] ?? ''));
+        $formValues['category_ids'] = $selectedCategoryIds;
 
         if ($formValues['title'] === '') {
             $fieldErrors['title'] = 'Please enter a job title.';
@@ -99,6 +128,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldErrors['location'] = 'Please choose only Canada or India.';
         }
 
+        if (hasInvalidCategorySelection($_POST['category_id'] ?? null, $allowedCategoryIds)) {
+            $fieldErrors['categories'] = 'Please choose only saved categories.';
+        }
+
         if ($formValues['description'] === '') {
             $fieldErrors['description'] = 'Please enter a job description.';
         }
@@ -110,20 +143,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $editJobId,
                         $formValues['title'],
                         $formValues['description'],
-                        $formValues['location'] === '' ? null : $formValues['location']
+                        $formValues['location'] === '' ? null : $formValues['location'],
+                        1,
+                        $selectedCategoryIds
                     );
 
-                    $_SESSION['job_flash'] = [
+                    $_SESSION['admin_flash'] = [
                         'message' => sprintf('"%s" was updated.', $formValues['title']),
                     ];
                 } else {
                     insertJobRecord(
                         $formValues['title'],
                         $formValues['description'],
-                        $formValues['location'] === '' ? null : $formValues['location']
+                        $formValues['location'] === '' ? null : $formValues['location'],
+                        1,
+                        $selectedCategoryIds
                     );
 
-                    $_SESSION['job_flash'] = [
+                    $_SESSION['admin_flash'] = [
                         'message' => sprintf('"%s" was saved to the jobs table.', $formValues['title']),
                     ];
                 }
@@ -156,6 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $editJobId !== null) {
                 normalizeLocationSelection((string) ($editJob['location'] ?? ''), $allowedLocations)
             );
             $formValues['description'] = trim((string) ($editJob['description'] ?? ''));
+            $formValues['category_ids'] = normalizeCategorySelection($editJob['category_ids'] ?? [], $allowedCategoryIds);
         }
     } catch (Throwable $exception) {
         $pageError = 'The selected job could not be loaded for editing.';
@@ -269,6 +307,55 @@ function formatLocationSelection(array $locations): string
     return implode(', ', $locations);
 }
 
+function normalizeCategorySelection(mixed $value, array $allowedCategoryIds): array
+{
+    $values = is_array($value) ? $value : [$value];
+    $selected = [];
+
+    foreach ($values as $item) {
+        if (is_int($item)) {
+            $categoryId = $item;
+        } elseif (is_string($item) && ctype_digit($item)) {
+            $categoryId = (int) $item;
+        } else {
+            continue;
+        }
+
+        if ($categoryId <= 0 || !in_array($categoryId, $allowedCategoryIds, true)) {
+            continue;
+        }
+
+        $selected[$categoryId] = $categoryId;
+    }
+
+    return array_values($selected);
+}
+
+function hasInvalidCategorySelection(mixed $value, array $allowedCategoryIds): bool
+{
+    if ($value === null || $value === '') {
+        return false;
+    }
+
+    $values = is_array($value) ? $value : [$value];
+
+    foreach ($values as $item) {
+        if (is_int($item)) {
+            $categoryId = $item;
+        } elseif (is_string($item) && ctype_digit($item)) {
+            $categoryId = (int) $item;
+        } else {
+            return true;
+        }
+
+        if ($categoryId <= 0 || !in_array($categoryId, $allowedCategoryIds, true)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function readPositiveInt(mixed $value): ?int
 {
     if (is_int($value)) {
@@ -317,6 +404,11 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
     $query = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
 
     return 'index.php' . ($query !== '' ? '?' . $query : '') . '#jobs-section';
+}
+
+function buildAdminCategoriesSectionUrl(): string
+{
+    return 'categories.php';
 }
 ?>
 <!doctype html>
@@ -709,6 +801,33 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
         display: block;
       }
 
+      .field-help {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .selection-note {
+        padding: 14px 16px;
+        border: 1px dashed var(--line);
+        border-radius: 16px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .selection-note a {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .field.invalid .selection-note {
+        border-color: #d92d20;
+        background: #fff6f5;
+        color: var(--error-text);
+      }
+
       .actions {
         display: flex;
         align-items: center;
@@ -930,6 +1049,106 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
         pointer-events: none;
       }
 
+      .section-block {
+        margin-top: 30px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: clamp(1.6rem, 3vw, 2.15rem);
+        line-height: 1;
+      }
+
+      .section-head p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        max-width: 42rem;
+      }
+
+      .job-label-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .job-label-pill {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #edf3ff;
+        color: #2757a5;
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+
+      .category-list {
+        display: grid;
+      }
+
+      .category-item + .category-item {
+        border-top: 1px solid rgba(23, 36, 51, 0.08);
+      }
+
+      .category-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 0;
+      }
+
+      .category-item:first-child {
+        padding-top: 0;
+      }
+
+      .category-item:last-child {
+        padding-bottom: 0;
+      }
+
+      .category-head {
+        display: grid;
+        gap: 8px;
+      }
+
+      .category-name {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+
+      .category-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .category-meta span {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+
+      .category-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
       .overlay {
         display: none;
       }
@@ -982,7 +1201,14 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
           flex-direction: column;
         }
 
+        .section-head,
+        .category-item {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
         .job-side,
+        .category-actions,
         .job-actions {
           justify-items: start;
           justify-content: flex-start;
@@ -1009,11 +1235,12 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
         </a>
 
         <nav class="nav" aria-label="Sidebar navigation">
-          <a href="#jobs-section" class="nav-link active" aria-current="page">Jobs</a>
+          <a href="<?php echo escapeValue(buildAdminJobsSectionUrl($currentJobsPage, $isEditMode ? $editJobId : null)); ?>" class="nav-link active" aria-current="page">Jobs</a>
+          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link">Categories</a>
         </nav>
 
         <div class="sidebar-note">
-          Jobs posted from this screen are inserted into the MySQL <code>jobs</code> table and shown again from the database.
+          Create and edit job posts here. Manage reusable job categories from the separate Categories page, then select them while posting a role.
         </div>
 
         <div class="sidebar-footer">
@@ -1035,18 +1262,19 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
           <div>
             <button type="button" class="menu-toggle" id="menu-toggle">Menu</button>
             <h1 class="page-title">Jobs</h1>
-            <p class="page-copy">Use the form below to create a job post and save it into the database.</p>
+            <p class="page-copy">Create job posts here and assign saved categories from the separate Categories page.</p>
           </div>
 
           <div class="badge-group">
             <div class="badge">Protected login</div>
-            <div class="badge">MySQL save</div>
+            <div class="badge"><?php echo count($jobs); ?> jobs</div>
+            <div class="badge"><?php echo count($categories); ?> categories</div>
           </div>
         </header>
 
         <section class="hero">
           <h2><?php echo $isEditMode ? 'Edit job post' : 'Post a new job'; ?></h2>
-          <p>Add the title, location, and description, then save the form. Jobs can now be created, edited, and deleted directly from this admin screen.</p>
+          <p>Choose the role details, then attach any saved categories such as <strong>Independent Contractor</strong> before publishing.</p>
         </section>
 
         <section class="stack">
@@ -1108,6 +1336,32 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
                   <div class="field-error"><?php echo escapeValue($fieldErrors['location'] !== '' ? $fieldErrors['location'] : 'Please choose Canada, India, or both.'); ?></div>
                 </div>
 
+                <div class="field <?php echo $fieldErrors['categories'] !== '' ? 'invalid' : ''; ?>">
+                  <span class="field-label" id="job-category-label">Categories</span>
+                  <?php if ($categories === []): ?>
+                    <div class="selection-note">
+                      No categories are saved yet. Add them from the <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>">Categories</a> page first.
+                    </div>
+                  <?php else: ?>
+                    <div class="checkbox-group" role="group" aria-labelledby="job-category-label">
+                      <?php foreach ($categories as $category): ?>
+                        <?php $categoryId = (int) ($category['id'] ?? 0); ?>
+                        <label class="checkbox-option">
+                          <input
+                            type="checkbox"
+                            name="category_id[]"
+                            value="<?php echo $categoryId; ?>"
+                            class="checkbox-input"
+                            <?php echo in_array($categoryId, $formValues['category_ids'], true) ? 'checked' : ''; ?>
+                          >
+                          <span><?php echo escapeValue((string) ($category['name'] ?? '')); ?></span>
+                        </label>
+                      <?php endforeach; ?>
+                    </div>
+                  <?php endif; ?>
+                  <div class="field-error"><?php echo escapeValue($fieldErrors['categories'] !== '' ? $fieldErrors['categories'] : 'Select any saved categories that apply to this role.'); ?></div>
+                </div>
+
                 <div class="field <?php echo $fieldErrors['description'] !== '' ? 'invalid' : ''; ?>">
                   <label for="job-description">Description</label>
                   <textarea
@@ -1152,6 +1406,14 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
 
                           <?php if (trim((string) ($job['location'] ?? '')) !== ''): ?>
                             <span class="job-location"><?php echo escapeValue((string) $job['location']); ?></span>
+                          <?php endif; ?>
+
+                          <?php if (($job['categories'] ?? []) !== []): ?>
+                            <div class="job-label-list" aria-label="Job categories">
+                              <?php foreach (($job['categories'] ?? []) as $category): ?>
+                                <span class="job-label-pill"><?php echo escapeValue((string) ($category['name'] ?? '')); ?></span>
+                              <?php endforeach; ?>
+                            </div>
                           <?php endif; ?>
                         </div>
 
@@ -1206,6 +1468,7 @@ function buildAdminJobsSectionUrl(int $page = 1, ?int $editJobId = null): string
             </div>
           </article>
         </section>
+
       </main>
     </div>
 

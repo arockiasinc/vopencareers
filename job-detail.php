@@ -43,14 +43,39 @@ function formatJobDetailDate(?string $value, string $format = 'M j, Y', string $
     }
 }
 
-function buildJobDetailReference(int $jobId): string
+function getJobDetailCategories(array $job): array
 {
-    return 'JOB-' . str_pad((string) $jobId, 4, '0', STR_PAD_LEFT);
+    $labels = [];
+
+    foreach (($job['categories'] ?? []) as $category) {
+        $label = trim((string) ($category['name'] ?? ''));
+
+        if ($label === '') {
+            continue;
+        }
+
+        $labels[$label] = true;
+    }
+
+    return array_keys($labels);
 }
 
 function buildJobDetailUrl(array $job): string
 {
     return buildJobPublicPath($job);
+}
+
+function buildJobDetailAbsoluteUrl(array $job): string
+{
+    $path = buildJobDetailUrl($job);
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    $isHttps = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+
+    if ($host === '') {
+        return $path;
+    }
+
+    return ($isHttps ? 'https://' : 'http://') . $host . $path;
 }
 
 function findJobDetailRecordBySlug(string $slug, array $jobRecords): ?array
@@ -350,6 +375,42 @@ function buildJobDetailDescriptionHtml(?string $value): string
     return buildJobDetailPlainTextHtml(buildJobDetailPlainText($raw));
 }
 
+function buildJobDetailApplicationLink(array $job): string
+{
+    $jobTitle = trim((string) ($job['title'] ?? 'Open role'));
+    $jobLocation = trim((string) ($job['location'] ?? ''));
+    $jobUrl = buildJobDetailAbsoluteUrl($job);
+    $bodyLines = [
+        'Hello,',
+        '',
+        'I would like to apply for the ' . $jobTitle . ' role at VOpen Market.',
+    ];
+
+    if ($jobLocation !== '') {
+        $bodyLines[] = 'Location: ' . $jobLocation;
+    }
+
+    $bodyLines[] = 'Job link: ' . $jobUrl;
+    $bodyLines[] = '';
+    $bodyLines[] = 'Thank you.';
+
+    return 'mailto:?subject=' . rawurlencode('Application for ' . $jobTitle . ' | VOpen Market')
+        . '&body=' . rawurlencode(implode("\n", $bodyLines));
+}
+
+function buildJobDetailSavedJobPayload(array $job): array
+{
+    return [
+        'id' => (int) ($job['id'] ?? 0),
+        'title' => trim((string) ($job['title'] ?? '')),
+        'location' => trim((string) ($job['location'] ?? '')),
+        'categories' => getJobDetailCategories($job),
+        'postedLabel' => 'Posted ' . formatJobDetailDate((string) ($job['created_at'] ?? '')),
+        'summary' => summarizeJobDetailDescription((string) ($job['description'] ?? ''), 260),
+        'url' => buildJobDetailUrl($job),
+    ];
+}
+
 function buildRelatedJobCards(array $currentJob, array $jobRecords, int $limit = 3): array
 {
     $currentJobId = (int) ($currentJob['id'] ?? 0);
@@ -447,6 +508,10 @@ $pageDescription = $job !== null
 $currentPage = 'search';
 $bodyClass = 'bg-jet-cream';
 $headerClass = 'sticky top-0 z-50 border-b border-black/5 bg-white site-header-elevated';
+$jobApplyUrl = $job !== null ? buildJobDetailApplicationLink($job) : '#';
+$jobSavedPayloadJson = $job !== null
+    ? json_encode(buildJobDetailSavedJobPayload($job), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+    : null;
 
 include 'container/header.php';
 ?>
@@ -482,33 +547,15 @@ include 'container/header.php';
             <?php if (trim((string) ($job['location'] ?? '')) !== ''): ?>
               <span class="job-detail-pill job-detail-pill-location"><?php echo escapeJobDetailValue((string) $job['location']); ?></span>
             <?php endif; ?>
+            <?php foreach (getJobDetailCategories($job) as $categoryLabel): ?>
+              <span class="job-detail-pill"><?php echo escapeJobDetailValue($categoryLabel); ?></span>
+            <?php endforeach; ?>
             <span class="job-detail-pill">Open role</span>
             <span class="job-detail-pill">Posted <?php echo escapeJobDetailValue(formatJobDetailDate((string) ($job['created_at'] ?? ''))); ?></span>
           </div>
         </div>
 
-        <aside class="job-detail-hero-panel">
-          <p class="job-detail-hero-panel-label">Role snapshot</p>
-
-          <dl class="job-detail-stats">
-            <div>
-              <dt>Reference</dt>
-              <dd><?php echo escapeJobDetailValue(buildJobDetailReference((int) ($job['id'] ?? 0))); ?></dd>
-            </div>
-            <div>
-              <dt>Published</dt>
-              <dd><?php echo escapeJobDetailValue(formatJobDetailDate((string) ($job['created_at'] ?? ''), 'F j, Y', 'Recently posted')); ?></dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd><?php echo escapeJobDetailValue(trim((string) ($job['location'] ?? '')) !== '' ? (string) $job['location'] : 'Across VOpen Market'); ?></dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>Open role</dd>
-            </div>
-          </dl>
-        </aside>
+    
       </section>
 
       <div class="job-detail-layout">
@@ -522,39 +569,44 @@ include 'container/header.php';
             <div class="job-detail-description">
               <?php echo buildJobDetailDescriptionHtml((string) ($job['description'] ?? '')); ?>
             </div>
+
+            <div class="job-detail-actions">
+              <button
+                type="button"
+                class="job-detail-save-button"
+                data-save-job
+                data-save-job-label="Save Job"
+                data-saved-label="Saved"
+                <?php if (is_string($jobSavedPayloadJson)): ?>
+                  data-job="<?php echo escapeJobDetailValue($jobSavedPayloadJson); ?>"
+                <?php endif; ?>
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6.75 4.75h10.5a1.5 1.5 0 0 1 1.5 1.5v13l-6.75-3.4-6.75 3.4v-13a1.5 1.5 0 0 1 1.5-1.5Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+                <span data-save-job-text>Save Job</span>
+              </button>
+
+              <a
+                href="<?php echo escapeJobDetailValue($jobApplyUrl); ?>"
+                class="job-detail-apply-button"
+                data-apply-job
+                <?php if (is_string($jobSavedPayloadJson)): ?>
+                  data-job="<?php echo escapeJobDetailValue($jobSavedPayloadJson); ?>"
+                <?php endif; ?>
+              >
+                Apply
+              </a>
+            </div>
           </article>
         </div>
 
-        <aside class="job-detail-sidebar">
-          <div class="job-detail-sidebar-card job-detail-sidebar-card-accent">
-            <p class="job-detail-sidebar-label">Explore next</p>
-            <a href="<?php echo escapeJobDetailValue(buildAppPath('search-results.php')); ?>" class="job-detail-primary-link">Back to Search Jobs</a>
-            <a href="<?php echo escapeJobDetailValue(buildAppPath('about-us.php')); ?>" class="job-detail-secondary-link">Discover VOpen</a>
-          </div>
-
-          <div class="job-detail-sidebar-card">
-            <div class="job-detail-sidebar-head">
-              <p class="job-detail-sidebar-label">More open roles</p>
-              <a href="<?php echo escapeJobDetailValue(buildAppPath('search-results.php')); ?>" class="job-detail-sidebar-mini-link">All jobs</a>
-            </div>
-
-            <?php if ($relatedJobs === []): ?>
-              <p class="job-detail-sidebar-copy">Publish more roles in the admin panel to populate this section.</p>
-            <?php else: ?>
-              <div class="job-detail-related-list">
-                <?php foreach ($relatedJobs as $relatedJob): ?>
-                  <a href="<?php echo escapeJobDetailValue(buildJobDetailUrl($relatedJob)); ?>" class="job-detail-related-link">
-                    <span class="job-detail-related-meta">
-                      <?php echo escapeJobDetailValue(trim((string) ($relatedJob['location'] ?? '')) !== '' ? (string) $relatedJob['location'] : 'VOpen Market'); ?>
-                      <span aria-hidden="true">·</span>
-                      Posted <?php echo escapeJobDetailValue(formatJobDetailDate((string) ($relatedJob['created_at'] ?? ''))); ?>
-                    </span>
-                    <strong><?php echo escapeJobDetailValue((string) ($relatedJob['title'] ?? 'Open role')); ?></strong>
-                  </a>
-                <?php endforeach; ?>
-              </div>
-            <?php endif; ?>
-          </div>
+           <aside class="job-detail-hero-panel job-detail-hero-panel-visual" aria-label="Opportunity at VOpen Market">
+          <img
+            src="<?php echo escapeJobDetailValue(buildAppPath('images/opportunity.webp')); ?>"
+            alt="Opportunity at VOpen Market"
+            class=""
+          >
         </aside>
       </div>
     <?php endif; ?>

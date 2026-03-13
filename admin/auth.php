@@ -1,43 +1,17 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/container/db.php';
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_name('vopen_admin');
     session_start();
 }
 
 const VOPEN_ADMIN_SESSION_KEY = 'vopen_admin_user';
+const VOPEN_ADMIN_SESSION_NAME_KEY = 'vopen_admin_name';
 const VOPEN_ADMIN_LAST_ACTIVE_KEY = 'vopen_admin_last_active';
 const VOPEN_ADMIN_IDLE_TIMEOUT = 28800;
-
-function adminCredentials(): array
-{
-    $envUsername = trim((string) getenv('VOPEN_ADMIN_USERNAME'));
-    $envPassword = (string) getenv('VOPEN_ADMIN_PASSWORD');
-    $envPasswordHash = trim((string) getenv('VOPEN_ADMIN_PASSWORD_HASH'));
-
-    if ($envUsername !== '' && $envPasswordHash !== '') {
-        return [
-            'username' => $envUsername,
-            'password_hash' => $envPasswordHash,
-            'password' => null,
-        ];
-    }
-
-    if ($envUsername !== '' && $envPassword !== '') {
-        return [
-            'username' => $envUsername,
-            'password_hash' => null,
-            'password' => $envPassword,
-        ];
-    }
-
-    return [
-        'username' => 'admin',
-        'password_hash' => '$2y$10$qIE5.vVJ5FsoHiiniVB/LulNyJrpX.GeoGIIxLN5Ht7In0QpeYboK',
-        'password' => null,
-    ];
-}
 
 function redirectTo(string $path): never
 {
@@ -91,34 +65,33 @@ function isAdminAuthenticated(): bool
 
 function adminAuthenticatedUser(): string
 {
+    $displayName = trim((string) ($_SESSION[VOPEN_ADMIN_SESSION_NAME_KEY] ?? ''));
+
+    if ($displayName !== '') {
+        return $displayName;
+    }
+
     return (string) ($_SESSION[VOPEN_ADMIN_SESSION_KEY] ?? '');
 }
 
 function attemptAdminLogin(string $username, string $password): bool
 {
-    $credentials = adminCredentials();
-    $storedUsername = (string) $credentials['username'];
+    $adminUser = fetchAdminUserRecordByUsername($username);
 
-    if ($storedUsername === '' || !hash_equals($storedUsername, $username)) {
+    if ($adminUser === null) {
         return false;
     }
 
-    $passwordMatches = false;
-    $passwordHash = $credentials['password_hash'];
+    $storedUsername = (string) ($adminUser['username'] ?? '');
+    $passwordHash = trim((string) ($adminUser['password_hash'] ?? ''));
 
-    if (is_string($passwordHash) && $passwordHash !== '') {
-        $passwordMatches = password_verify($password, $passwordHash);
-    } else {
-        $storedPassword = (string) ($credentials['password'] ?? '');
-        $passwordMatches = $storedPassword !== '' && hash_equals($storedPassword, $password);
-    }
-
-    if (!$passwordMatches) {
+    if ($storedUsername === '' || $passwordHash === '' || !password_verify($password, $passwordHash)) {
         return false;
     }
 
     session_regenerate_id(true);
     $_SESSION[VOPEN_ADMIN_SESSION_KEY] = $storedUsername;
+    $_SESSION[VOPEN_ADMIN_SESSION_NAME_KEY] = trim((string) ($adminUser['full_name'] ?? '')) ?: $storedUsername;
     $_SESSION[VOPEN_ADMIN_LAST_ACTIVE_KEY] = time();
 
     return true;
