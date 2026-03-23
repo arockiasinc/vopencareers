@@ -2,150 +2,110 @@
 declare(strict_types=1);
 
 require __DIR__ . '/auth.php';
-require_once __DIR__ . '/container/db.php';
+require_once __DIR__ . '/container/email-settings.php';
 
 requireAdminAuth();
 
 $adminName = adminAuthenticatedUser();
-$categoryFormValues = [
-    'name' => '',
-];
-$categoryFieldErrors = [
-    'name' => '',
-];
 $pageError = '';
 $successMessage = '';
-$categories = [];
+$emailSettings = loadJobApplicationEmailSettings();
+$emailInputValues = [
+    'to' => '',
+    'cc' => '',
+    'bcc' => '',
+];
 
 if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
     $flash = $_SESSION['admin_flash'];
     $successMessage = (string) ($flash['message'] ?? '');
     unset($_SESSION['admin_flash']);
-} elseif (isset($_SESSION['job_flash']) && is_array($_SESSION['job_flash'])) {
-    $flash = $_SESSION['job_flash'];
-    $successMessage = (string) ($flash['message'] ?? '');
-    unset($_SESSION['job_flash']);
-}
-
-try {
-    $categories = fetchCategoryRecords();
-} catch (Throwable $exception) {
-    $pageError = 'The categories list could not be loaded. Check the database connection and try again.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $categoryAction = (string) ($_POST['category_action'] ?? 'create');
+    $emailAction = trim((string) ($_POST['email_action'] ?? ''));
+    $recipientGroup = strtolower(trim((string) ($_POST['recipient_group'] ?? '')));
+    $recipientEmail = trim((string) ($_POST['email_address'] ?? ''));
 
-    if (!in_array($categoryAction, ['create', 'delete'], true)) {
-        $categoryAction = 'create';
-    }
+    if (!in_array($recipientGroup, JOB_APPLICATION_EMAIL_GROUPS, true)) {
+        $pageError = 'Choose a valid recipient group.';
+    } elseif ($emailAction === 'add') {
+        $emailInputValues[$recipientGroup] = $recipientEmail;
+        $validatedEmail = filter_var($recipientEmail, FILTER_VALIDATE_EMAIL);
 
-    if ($categoryAction === 'delete') {
-        $deleteCategoryId = readPositiveInt($_POST['category_id'] ?? null);
-
-        if ($deleteCategoryId === null) {
-            $pageError = 'Invalid category selected for deletion.';
+        if ($validatedEmail === false) {
+            $pageError = 'Enter a valid email address.';
         } else {
-            try {
-                $categoryToDelete = findCategoryRecordById($categories, $deleteCategoryId);
+            $alreadyExists = false;
 
-                if ($categoryToDelete === null) {
-                    $pageError = 'The selected category was not found.';
-                } else {
-                    deleteCategoryRecord($deleteCategoryId);
+            foreach ((array) ($emailSettings[$recipientGroup] ?? []) as $savedRecipient) {
+                $savedEmail = strtolower(trim((string) ($savedRecipient['email'] ?? '')));
 
+                if ($savedEmail === strtolower($validatedEmail)) {
+                    $alreadyExists = true;
+                    break;
+                }
+            }
+
+            if ($alreadyExists) {
+                $pageError = 'That email address is already listed in this section.';
+            } else {
+                $emailSettings[$recipientGroup][] = [
+                    'email' => $validatedEmail,
+                    'name' => '',
+                ];
+
+                try {
+                    saveJobApplicationEmailSettings($emailSettings);
                     $_SESSION['admin_flash'] = [
-                        'message' => sprintf('"%s" category was deleted.', (string) ($categoryToDelete['name'] ?? '')),
+                        'message' => sprintf('%s recipient %s was added.', strtoupper($recipientGroup), $validatedEmail),
                     ];
 
-                    redirectTo(buildAdminCategoriesSectionUrl());
+                    redirectTo(buildAdminEmailsUrl());
+                } catch (Throwable $exception) {
+                    $pageError = 'The email address could not be saved right now. Please try again.';
                 }
+            }
+        }
+    } elseif ($emailAction === 'delete') {
+        $recipientIndex = null;
+
+        foreach ((array) ($emailSettings[$recipientGroup] ?? []) as $index => $savedRecipient) {
+            $savedEmail = strtolower(trim((string) ($savedRecipient['email'] ?? '')));
+
+            if ($savedEmail === strtolower($recipientEmail)) {
+                $recipientIndex = $index;
+                break;
+            }
+        }
+
+        if ($recipientIndex === null) {
+            $pageError = 'The selected email address was not found.';
+        } elseif ($recipientGroup === 'to' && count((array) ($emailSettings['to'] ?? [])) <= 1) {
+            $pageError = 'At least one To recipient is required.';
+        } else {
+            unset($emailSettings[$recipientGroup][$recipientIndex]);
+            $emailSettings[$recipientGroup] = array_values((array) $emailSettings[$recipientGroup]);
+
+            try {
+                saveJobApplicationEmailSettings($emailSettings);
+                $_SESSION['admin_flash'] = [
+                    'message' => sprintf('%s recipient %s was removed.', strtoupper($recipientGroup), $recipientEmail),
+                ];
+
+                redirectTo(buildAdminEmailsUrl());
             } catch (Throwable $exception) {
-                $pageError = 'The category could not be deleted. Check the database connection and try again.';
+                $pageError = 'The email address could not be removed right now. Please try again.';
             }
         }
     } else {
-        $categoryFormValues['name'] = trim((string) ($_POST['name'] ?? ''));
-
-        if ($categoryFormValues['name'] === '') {
-            $categoryFieldErrors['name'] = 'Please enter a category name.';
-        } elseif (textLength($categoryFormValues['name']) > 255) {
-            $categoryFieldErrors['name'] = 'Category name must be 255 characters or fewer.';
-        } else {
-            try {
-                if (fetchCategoryRecordByName($categoryFormValues['name']) !== null) {
-                    $categoryFieldErrors['name'] = 'This category already exists.';
-                }
-            } catch (Throwable $exception) {
-                if ($pageError === '') {
-                    $pageError = 'The category could not be validated. Check the database connection and try again.';
-                }
-            }
-        }
-
-        if ($pageError === '' && !array_filter($categoryFieldErrors)) {
-            try {
-                insertCategoryRecord($categoryFormValues['name']);
-
-                $_SESSION['admin_flash'] = [
-                    'message' => sprintf('"%s" category was saved.', $categoryFormValues['name']),
-                ];
-
-                redirectTo(buildAdminCategoriesSectionUrl());
-            } catch (Throwable $exception) {
-                $pageError = 'The category could not be saved. Check the database connection and try again.';
-            }
-        }
+        $pageError = 'Invalid action requested.';
     }
 }
 
 function escapeValue(string $value): string
 {
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
-
-function readPositiveInt(mixed $value): ?int
-{
-    if (is_int($value)) {
-        return $value > 0 ? $value : null;
-    }
-
-    if (!is_string($value) || $value === '' || !ctype_digit($value)) {
-        return null;
-    }
-
-    $intValue = (int) $value;
-
-    return $intValue > 0 ? $intValue : null;
-}
-
-function textLength(string $value): int
-{
-    return function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
-}
-
-function formatCreatedAt(?string $value): string
-{
-    if ($value === null || $value === '') {
-        return 'Just now';
-    }
-
-    try {
-        return (new DateTimeImmutable($value))->format('M j, Y g:i A');
-    } catch (Throwable $exception) {
-        return $value;
-    }
-}
-
-function findCategoryRecordById(array $categories, int $categoryId): ?array
-{
-    foreach ($categories as $category) {
-        if ((int) ($category['id'] ?? 0) === $categoryId) {
-            return $category;
-        }
-    }
-
-    return null;
 }
 
 function buildAdminJobsSectionUrl(): string
@@ -168,17 +128,24 @@ function buildAdminScrollingCategoriesSectionUrl(): string
     return 'scrolling-categories.php';
 }
 
-function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
+function buildAdminPhraseRotatorSectionUrl(): string
 {
-    $parameters = [];
+    return 'phrase-rotator.php';
+}
 
-    if ($page > 1) {
-        $parameters['phrase_rotator_page'] = $page;
-    }
+function buildAdminEmailsUrl(): string
+{
+    return 'emails.php';
+}
 
-    $query = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
-
-    return 'phrase-rotator.php' . ($query !== '' ? '?' . $query : '');
+function recipientGroupLabel(string $group): string
+{
+    return match ($group) {
+        'to' => 'To',
+        'cc' => 'CC',
+        'bcc' => 'BCC',
+        default => strtoupper($group),
+    };
 }
 ?>
 <!doctype html>
@@ -186,7 +153,7 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VOpen Market Admin | Categories</title>
+    <title>VOpen Market Admin | Email</title>
     <style>
       :root {
         --bg: #eef2f6;
@@ -233,8 +200,7 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
       }
 
       button,
-      input,
-      textarea {
+      input {
         font: inherit;
       }
 
@@ -294,15 +260,6 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
       .nav-link.active {
         background: #fff;
         color: var(--sidebar);
-      }
-
-      .sidebar-note {
-        padding: 16px;
-        border-radius: 18px;
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.76);
-        font-size: 0.95rem;
-        line-height: 1.5;
       }
 
       .sidebar-footer {
@@ -426,9 +383,9 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         color: var(--error-text);
       }
 
-      .grid {
+      .email-sections {
         display: grid;
-        grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 24px;
       }
 
@@ -455,10 +412,6 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
       .card-body {
         padding: 24px;
-      }
-
-      .field + .field {
-        margin-top: 18px;
       }
 
       .field > label {
@@ -491,28 +444,11 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         line-height: 1.5;
       }
 
-      .field-error {
-        display: none;
-        margin-top: 8px;
-        color: var(--error-text);
-        font-size: 0.95rem;
-      }
-
-      .field.invalid .input {
-        border-color: #d92d20;
-        background: #fff6f5;
-      }
-
-      .field.invalid .field-error {
-        display: block;
-      }
-
       .actions {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        gap: 16px;
-        margin-top: 22px;
+        gap: 12px;
+        margin-top: 18px;
         flex-wrap: wrap;
       }
 
@@ -552,71 +488,35 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         font-size: 0.92rem;
       }
 
-      .jobs-empty {
-        padding: 24px;
+      .recipient-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .recipient-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border: 1px solid rgba(23, 36, 51, 0.08);
+        border-radius: 18px;
+        background: var(--panel-soft);
+      }
+
+      .recipient-email {
+        font-weight: 700;
+        word-break: break-word;
+      }
+
+      .empty-state {
+        padding: 18px;
         border: 1px dashed var(--line);
         border-radius: 18px;
         background: var(--panel-soft);
         color: var(--muted);
         text-align: center;
-      }
-
-      .category-list {
-        display: grid;
-      }
-
-      .category-item + .category-item {
-        border-top: 1px solid rgba(23, 36, 51, 0.08);
-      }
-
-      .category-item {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 18px 0;
-      }
-
-      .category-item:first-child {
-        padding-top: 0;
-      }
-
-      .category-item:last-child {
-        padding-bottom: 0;
-      }
-
-      .category-head {
-        display: grid;
-        gap: 8px;
-      }
-
-      .category-name {
-        margin: 0;
-        font-size: 1.05rem;
-      }
-
-      .category-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .category-meta span {
-        display: inline-flex;
-        align-items: center;
-        padding: 7px 10px;
-        border-radius: 999px;
-        background: var(--panel-soft);
-        color: var(--muted);
-        font-size: 0.84rem;
-        font-weight: 700;
-      }
-
-      .category-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        justify-content: flex-end;
       }
 
       .job-action-form {
@@ -627,11 +527,13 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         display: none;
       }
 
-      @media (max-width: 960px) {
-        .grid {
+      @media (max-width: 1100px) {
+        .email-sections {
           grid-template-columns: 1fr;
         }
+      }
 
+      @media (max-width: 960px) {
         .content {
           padding: 22px 16px;
           margin-left: 0;
@@ -663,13 +565,12 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         }
 
         .topbar,
-        .category-item {
+        .recipient-item {
           align-items: flex-start;
           flex-direction: column;
         }
 
-        .badge-group,
-        .category-actions {
+        .badge-group {
           justify-content: flex-start;
         }
       }
@@ -695,15 +596,13 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
         <nav class="nav" aria-label="Sidebar navigation">
           <a href="<?php echo escapeValue(buildAdminJobsSectionUrl()); ?>" class="nav-link">Jobs</a>
-          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link active" aria-current="page">Categories</a>
+          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link">Categories</a>
           <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl()); ?>" class="nav-link">Scrolling Cities</a>
           <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl()); ?>" class="nav-link">Scrolling Categories</a>
           <a href="<?php echo escapeValue(buildAdminPhraseRotatorSectionUrl()); ?>" class="nav-link">Phrase Rotator</a>
-          <a href="emails.php" class="nav-link">Email</a>
+          <a href="<?php echo escapeValue(buildAdminEmailsUrl()); ?>" class="nav-link active" aria-current="page">Email</a>
           <a href="settings.php" class="nav-link">Settings</a>
         </nav>
-
-        
 
         <div class="sidebar-footer">
           <div class="sidebar-user">
@@ -723,13 +622,15 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         <header class="topbar">
           <div>
             <button type="button" class="menu-toggle" id="menu-toggle">Menu</button>
-            <h1 class="page-title">Categories</h1>
-            <p class="page-copy">Create category options here with a text input, then select them later while posting jobs.</p>
+            <h1 class="page-title">Email</h1>
+            <p class="page-copy">Add the job application notification mail IDs here. Every new application will be sent to the saved To, CC, and BCC recipients.</p>
           </div>
 
           <div class="badge-group">
             <div class="badge">Protected login</div>
-            <div class="badge"><?php echo count($categories); ?> categories</div>
+            <div class="badge"><?php echo count((array) ($emailSettings['to'] ?? [])); ?> To</div>
+            <div class="badge"><?php echo count((array) ($emailSettings['cc'] ?? [])); ?> CC</div>
+            <div class="badge"><?php echo count((array) ($emailSettings['bcc'] ?? [])); ?> BCC</div>
           </div>
         </header>
 
@@ -743,70 +644,59 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
           <?php endif; ?>
         </section>
 
-        <section class="grid">
-          <article class="card">
-            <div class="card-head">
-              <h3>Add Category</h3>
-              <div class="badge">Text input save</div>
-            </div>
-            <div class="card-body">
-              <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" novalidate>
-                <input type="hidden" name="category_action" value="create">
+        <section class="email-sections">
+          <?php foreach (JOB_APPLICATION_EMAIL_GROUPS as $group): ?>
+            <article class="card">
+              <div class="card-head">
+                <h3><?php echo escapeValue(recipientGroupLabel($group)); ?> Mail IDs</h3>
+                <div class="badge"><?php echo count((array) ($emailSettings[$group] ?? [])); ?> saved</div>
+              </div>
 
-                <div class="field <?php echo $categoryFieldErrors['name'] !== '' ? 'invalid' : ''; ?>">
-                  <label for="category-name">Category name</label>
-                  <input
-                    id="category-name"
-                    name="name"
-                    class="input"
-                    type="text"
-                    placeholder="Independent Contractor"
-                    value="<?php echo escapeValue($categoryFormValues['name']); ?>"
-                  >
-                  <div class="field-help">Saved categories appear on the Jobs page as selectable options.</div>
-                  <div class="field-error"><?php echo escapeValue($categoryFieldErrors['name'] !== '' ? $categoryFieldErrors['name'] : 'Please enter a category name.'); ?></div>
-                </div>
+              <div class="card-body">
+                <form method="post" action="<?php echo escapeValue(buildAdminEmailsUrl()); ?>" novalidate>
+                  <input type="hidden" name="email_action" value="add">
+                  <input type="hidden" name="recipient_group" value="<?php echo escapeValue($group); ?>">
 
-                <div class="actions">
-                  <button type="submit" class="button button-primary">Save Category</button>
-                </div>
-              </form>
-            </div>
-          </article>
+                  <div class="field">
+                    <label for="email-<?php echo escapeValue($group); ?>"><?php echo escapeValue(recipientGroupLabel($group)); ?> mail ID</label>
+                    <input
+                      id="email-<?php echo escapeValue($group); ?>"
+                      name="email_address"
+                      class="input"
+                      type="email"
+                      placeholder="<?php echo escapeValue($group); ?>@example.com"
+                      value="<?php echo escapeValue($emailInputValues[$group]); ?>"
+                    >
+                    <div class="field-help">Add one email ID at a time. You can save multiple addresses in this section.</div>
+                  </div>
 
-          <article class="card">
-            <div class="card-head">
-              <h3>Saved Categories</h3>
-              <div class="badge"><?php echo count($categories); ?> saved</div>
-            </div>
-            <div class="card-body">
-              <?php if ($categories === []): ?>
-                <div class="jobs-empty">No categories have been saved yet.</div>
-              <?php else: ?>
-                <div class="category-list">
-                  <?php foreach ($categories as $category): ?>
-                    <article class="category-item">
-                      <div class="category-head">
-                        <h4 class="category-name"><?php echo escapeValue((string) ($category['name'] ?? '')); ?></h4>
-                        <div class="category-meta">
-                          <span><?php echo (int) ($category['jobs_count'] ?? 0); ?> job<?php echo (int) ($category['jobs_count'] ?? 0) === 1 ? '' : 's'; ?></span>
-                          <span><?php echo escapeValue(formatCreatedAt((string) ($category['created_at'] ?? ''))); ?></span>
-                        </div>
-                      </div>
+                  <div class="actions">
+                    <button type="submit" class="button button-primary">Add <?php echo escapeValue(recipientGroupLabel($group)); ?></button>
+                  </div>
+                </form>
 
-                      <div class="category-actions">
-                        <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="job-action-form" onsubmit="return confirm('Delete this category?');">
-                          <input type="hidden" name="category_action" value="delete">
-                          <input type="hidden" name="category_id" value="<?php echo (int) ($category['id'] ?? 0); ?>">
+                <div class="recipient-list">
+                  <?php if ((array) ($emailSettings[$group] ?? []) === []): ?>
+                    <div class="empty-state">No <?php echo escapeValue(recipientGroupLabel($group)); ?> mail IDs added yet.</div>
+                  <?php else: ?>
+                    <?php foreach ((array) ($emailSettings[$group] ?? []) as $recipient): ?>
+                      <?php $savedEmail = trim((string) ($recipient['email'] ?? '')); ?>
+                      <div class="recipient-item">
+                        <div class="recipient-email"><?php echo escapeValue($savedEmail); ?></div>
+
+                        <form method="post" action="<?php echo escapeValue(buildAdminEmailsUrl()); ?>" class="job-action-form" onsubmit="return confirm('Delete this email ID?');">
+                          <input type="hidden" name="email_action" value="delete">
+                          <input type="hidden" name="recipient_group" value="<?php echo escapeValue($group); ?>">
+                          <input type="hidden" name="email_address" value="<?php echo escapeValue($savedEmail); ?>">
                           <button type="submit" class="button button-danger button-small">Delete</button>
                         </form>
                       </div>
-                    </article>
-                  <?php endforeach; ?>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </div>
-              <?php endif; ?>
-            </div>
-          </article>
+              </div>
+            </article>
+          <?php endforeach; ?>
         </section>
       </main>
     </div>

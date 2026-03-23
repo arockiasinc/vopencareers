@@ -410,13 +410,36 @@ function buildAdminCategoriesSectionUrl(): string
 {
     return 'categories.php';
 }
+
+function buildAdminScrollingCitiesSectionUrl(): string
+{
+    return 'scrolling-cities.php';
+}
+
+function buildAdminScrollingCategoriesSectionUrl(): string
+{
+    return 'scrolling-categories.php';
+}
+
+function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
+{
+    $parameters = [];
+
+    if ($page > 1) {
+        $parameters['phrase_rotator_page'] = $page;
+    }
+
+    $query = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
+
+    return 'phrase-rotator.php' . ($query !== '' ? '?' . $query : '');
+}
 ?>
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VOpen Careers Admin | Jobs</title>
+    <title>VOpen Market Admin | Jobs</title>
     <style>
       :root {
         --bg: #eef2f6;
@@ -426,11 +449,12 @@ function buildAdminCategoriesSectionUrl(): string
         --muted: #607085;
         --line: #d7dee8;
         --neon-orange: #ff5f1f;
+        --admin-shell: #252423;
         --accent-rgb: 255, 95, 31;
         --accent: var(--neon-orange);
         --accent-strong: #d84f18;
         --accent-soft: #ffe6db;
-        --sidebar: var(--neon-orange);
+        --sidebar: var(--admin-shell);
         --sidebar-text: #fff7f2;
         --success-bg: #eaf8ef;
         --success-text: #14532d;
@@ -487,23 +511,22 @@ function buildAdminCategoriesSectionUrl(): string
       }
 
       .brand {
+        display: block;
         padding: 14px 16px;
         border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 18px;
         background: rgba(255, 255, 255, 0.07);
       }
 
-      .brand-title {
+      .brand-logo {
         display: block;
-        font-size: 1.1rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        color: #fff;
+        width: min(172px, 100%);
+        height: auto;
       }
 
       .brand-copy {
         display: block;
-        margin-top: 6px;
+        margin-top: 10px;
         font-size: 0.95rem;
         color: rgba(255, 255, 255, 0.72);
       }
@@ -634,26 +657,6 @@ function buildAdminCategoriesSectionUrl(): string
         color: var(--accent);
         font-weight: 700;
         white-space: nowrap;
-      }
-
-      .hero {
-        background: var(--neon-orange);
-        color: #fff;
-        border-radius: var(--radius-lg);
-        padding: 28px;
-        box-shadow: var(--shadow);
-        margin-bottom: 24px;
-      }
-
-      .hero h2 {
-        margin: 0 0 10px;
-        font-size: clamp(1.8rem, 3vw, 2.5rem);
-      }
-
-      .hero p {
-        margin: 0;
-        max-width: 44rem;
-        color: rgba(255, 255, 255, 0.82);
       }
 
       .stack {
@@ -1229,19 +1232,22 @@ function buildAdminCategoriesSectionUrl(): string
   <body>
     <div class="layout">
       <aside class="sidebar">
-        <a href="./index.php" class="brand">
-          <span class="brand-title">VOpen Careers</span>
+        <a href="./index.php" class="brand" aria-label="VOpen Market admin">
+          <img src="./images/logo.webp" alt="VOpen Market" class="brand-logo">
           <span class="brand-copy">Admin panel</span>
         </a>
 
         <nav class="nav" aria-label="Sidebar navigation">
           <a href="<?php echo escapeValue(buildAdminJobsSectionUrl($currentJobsPage, $isEditMode ? $editJobId : null)); ?>" class="nav-link active" aria-current="page">Jobs</a>
           <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link">Categories</a>
+          <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl()); ?>" class="nav-link">Scrolling Cities</a>
+          <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl()); ?>" class="nav-link">Scrolling Categories</a>
+          <a href="<?php echo escapeValue(buildAdminPhraseRotatorSectionUrl()); ?>" class="nav-link">Phrase Rotator</a>
+          <a href="emails.php" class="nav-link">Email</a>
+          <a href="settings.php" class="nav-link">Settings</a>
         </nav>
 
-        <div class="sidebar-note">
-          Create and edit job posts here. Manage reusable job categories from the separate Categories page, then select them while posting a role.
-        </div>
+        
 
         <div class="sidebar-footer">
           <div class="sidebar-user">
@@ -1271,11 +1277,6 @@ function buildAdminCategoriesSectionUrl(): string
             <div class="badge"><?php echo count($categories); ?> categories</div>
           </div>
         </header>
-
-        <section class="hero">
-          <h2><?php echo $isEditMode ? 'Edit job post' : 'Post a new job'; ?></h2>
-          <p>Choose the role details, then attach any saved categories such as <strong>Independent Contractor</strong> before publishing.</p>
-        </section>
 
         <section class="stack">
           <?php if ($successMessage !== ''): ?>

@@ -7,116 +7,136 @@ require_once __DIR__ . '/container/db.php';
 requireAdminAuth();
 
 $adminName = adminAuthenticatedUser();
-$categoryFormValues = [
-    'name' => '',
-];
-$categoryFieldErrors = [
-    'name' => '',
-];
 $pageError = '';
 $successMessage = '';
-$categories = [];
+$fieldErrors = [
+    'username' => '',
+    'current_password' => '',
+    'new_password' => '',
+    'confirm_password' => '',
+];
+$formValues = [
+    'username' => adminAuthenticatedUsername(),
+];
+$currentAdmin = null;
 
 if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
     $flash = $_SESSION['admin_flash'];
     $successMessage = (string) ($flash['message'] ?? '');
     unset($_SESSION['admin_flash']);
-} elseif (isset($_SESSION['job_flash']) && is_array($_SESSION['job_flash'])) {
-    $flash = $_SESSION['job_flash'];
-    $successMessage = (string) ($flash['message'] ?? '');
-    unset($_SESSION['job_flash']);
 }
 
 try {
-    $categories = fetchCategoryRecords();
+    $currentAdmin = fetchAdminUserRecordByUsername(adminAuthenticatedUsername());
+
+    if ($currentAdmin === null) {
+        logoutAdmin();
+        redirectTo('login.php');
+    }
+
+    $formValues['username'] = trim((string) ($currentAdmin['username'] ?? ''));
 } catch (Throwable $exception) {
-    $pageError = 'The categories list could not be loaded. Check the database connection and try again.';
+    $pageError = 'The admin account could not be loaded. Check the database connection and try again.';
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $categoryAction = (string) ($_POST['category_action'] ?? 'create');
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $currentAdmin !== null) {
+    $formValues['username'] = trim((string) ($_POST['username'] ?? ''));
+    $currentPassword = (string) ($_POST['current_password'] ?? '');
+    $newPassword = (string) ($_POST['new_password'] ?? '');
+    $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+    $passwordChangeRequested = $newPassword !== '' || $confirmPassword !== '';
+    $currentUsername = trim((string) ($currentAdmin['username'] ?? ''));
+    $usernameChanged = strcasecmp($formValues['username'], $currentUsername) !== 0;
+    $storedPasswordHash = trim((string) ($currentAdmin['password_hash'] ?? ''));
 
-    if (!in_array($categoryAction, ['create', 'delete'], true)) {
-        $categoryAction = 'create';
+    if ($formValues['username'] === '') {
+        $fieldErrors['username'] = 'Enter a username.';
+    } elseif (textLength($formValues['username']) > 100) {
+        $fieldErrors['username'] = 'Username must be 100 characters or fewer.';
     }
 
-    if ($categoryAction === 'delete') {
-        $deleteCategoryId = readPositiveInt($_POST['category_id'] ?? null);
+    if ($currentPassword === '') {
+        $fieldErrors['current_password'] = 'Enter your current password to save changes.';
+    } elseif ($storedPasswordHash === '' || !password_verify($currentPassword, $storedPasswordHash)) {
+        $fieldErrors['current_password'] = 'Current password is incorrect.';
+    }
 
-        if ($deleteCategoryId === null) {
-            $pageError = 'Invalid category selected for deletion.';
-        } else {
-            try {
-                $categoryToDelete = findCategoryRecordById($categories, $deleteCategoryId);
-
-                if ($categoryToDelete === null) {
-                    $pageError = 'The selected category was not found.';
-                } else {
-                    deleteCategoryRecord($deleteCategoryId);
-
-                    $_SESSION['admin_flash'] = [
-                        'message' => sprintf('"%s" category was deleted.', (string) ($categoryToDelete['name'] ?? '')),
-                    ];
-
-                    redirectTo(buildAdminCategoriesSectionUrl());
-                }
-            } catch (Throwable $exception) {
-                $pageError = 'The category could not be deleted. Check the database connection and try again.';
-            }
-        }
-    } else {
-        $categoryFormValues['name'] = trim((string) ($_POST['name'] ?? ''));
-
-        if ($categoryFormValues['name'] === '') {
-            $categoryFieldErrors['name'] = 'Please enter a category name.';
-        } elseif (textLength($categoryFormValues['name']) > 255) {
-            $categoryFieldErrors['name'] = 'Category name must be 255 characters or fewer.';
-        } else {
-            try {
-                if (fetchCategoryRecordByName($categoryFormValues['name']) !== null) {
-                    $categoryFieldErrors['name'] = 'This category already exists.';
-                }
-            } catch (Throwable $exception) {
-                if ($pageError === '') {
-                    $pageError = 'The category could not be validated. Check the database connection and try again.';
-                }
-            }
+    if ($passwordChangeRequested) {
+        if ($newPassword === '') {
+            $fieldErrors['new_password'] = 'Enter a new password.';
+        } elseif (textLength($newPassword) < 8) {
+            $fieldErrors['new_password'] = 'New password must be at least 8 characters.';
+        } elseif (textLength($newPassword) > 255) {
+            $fieldErrors['new_password'] = 'New password must be 255 characters or fewer.';
         }
 
-        if ($pageError === '' && !array_filter($categoryFieldErrors)) {
-            try {
-                insertCategoryRecord($categoryFormValues['name']);
+        if ($confirmPassword === '') {
+            $fieldErrors['confirm_password'] = 'Confirm the new password.';
+        } elseif ($newPassword !== $confirmPassword) {
+            $fieldErrors['confirm_password'] = 'New password and confirmation do not match.';
+        }
+    }
 
-                $_SESSION['admin_flash'] = [
-                    'message' => sprintf('"%s" category was saved.', $categoryFormValues['name']),
-                ];
+    if ($pageError === '' && $fieldErrors['username'] === '' && $usernameChanged) {
+        try {
+            $existingAdmin = fetchAdminUserRecordByUsername($formValues['username']);
 
-                redirectTo(buildAdminCategoriesSectionUrl());
-            } catch (Throwable $exception) {
-                $pageError = 'The category could not be saved. Check the database connection and try again.';
+            if ($existingAdmin !== null && (int) ($existingAdmin['id'] ?? 0) !== (int) ($currentAdmin['id'] ?? 0)) {
+                $fieldErrors['username'] = 'That username is already in use.';
+            }
+        } catch (Throwable $exception) {
+            $pageError = 'The username could not be validated right now. Please try again.';
+        }
+    }
+
+    if ($pageError === '' && !array_filter($fieldErrors)) {
+        if (!$usernameChanged && !$passwordChangeRequested) {
+            $_SESSION['admin_flash'] = [
+                'message' => 'No credential changes were made.',
+            ];
+
+            redirectTo(buildAdminSettingsUrl());
+        }
+
+        $passwordHashToSave = $passwordChangeRequested ? password_hash($newPassword, PASSWORD_DEFAULT) : null;
+
+        try {
+            updateAdminUserCredentials((int) ($currentAdmin['id'] ?? 0), $formValues['username'], $passwordHashToSave);
+
+            $updatedAdmin = fetchAdminUserRecordByUsername($formValues['username']);
+
+            if ($updatedAdmin === null) {
+                throw new RuntimeException('Updated admin record could not be reloaded.');
+            }
+
+            session_regenerate_id(true);
+            storeAdminSessionUser($updatedAdmin);
+
+            $_SESSION['admin_flash'] = [
+                'message' => $usernameChanged && $passwordChangeRequested
+                    ? 'Username and password were updated successfully.'
+                    : ($passwordChangeRequested ? 'Password was updated successfully.' : 'Username was updated successfully.'),
+            ];
+
+            redirectTo(buildAdminSettingsUrl());
+        } catch (Throwable $exception) {
+            if ($exception instanceof mysqli_sql_exception && (int) $exception->getCode() === 1062) {
+                $fieldErrors['username'] = 'That username is already in use.';
+            } else {
+                $pageError = 'The account settings could not be saved right now. Please try again.';
             }
         }
     }
 }
+
+$currentUsernameValue = is_array($currentAdmin) ? trim((string) ($currentAdmin['username'] ?? '')) : '';
+$currentFullNameValue = is_array($currentAdmin) ? trim((string) ($currentAdmin['full_name'] ?? '')) : '';
+$accountCreatedAt = is_array($currentAdmin) ? formatDateTime($currentAdmin['created_at'] ?? null) : 'Not available';
+$accountUpdatedAt = is_array($currentAdmin) ? formatDateTime($currentAdmin['updated_at'] ?? null) : 'Not available';
 
 function escapeValue(string $value): string
 {
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
-
-function readPositiveInt(mixed $value): ?int
-{
-    if (is_int($value)) {
-        return $value > 0 ? $value : null;
-    }
-
-    if (!is_string($value) || $value === '' || !ctype_digit($value)) {
-        return null;
-    }
-
-    $intValue = (int) $value;
-
-    return $intValue > 0 ? $intValue : null;
 }
 
 function textLength(string $value): int
@@ -124,10 +144,10 @@ function textLength(string $value): int
     return function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
 }
 
-function formatCreatedAt(?string $value): string
+function formatDateTime(?string $value): string
 {
     if ($value === null || $value === '') {
-        return 'Just now';
+        return 'Not available';
     }
 
     try {
@@ -135,17 +155,6 @@ function formatCreatedAt(?string $value): string
     } catch (Throwable $exception) {
         return $value;
     }
-}
-
-function findCategoryRecordById(array $categories, int $categoryId): ?array
-{
-    foreach ($categories as $category) {
-        if ((int) ($category['id'] ?? 0) === $categoryId) {
-            return $category;
-        }
-    }
-
-    return null;
 }
 
 function buildAdminJobsSectionUrl(): string
@@ -168,17 +177,19 @@ function buildAdminScrollingCategoriesSectionUrl(): string
     return 'scrolling-categories.php';
 }
 
-function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
+function buildAdminPhraseRotatorSectionUrl(): string
 {
-    $parameters = [];
+    return 'phrase-rotator.php';
+}
 
-    if ($page > 1) {
-        $parameters['phrase_rotator_page'] = $page;
-    }
+function buildAdminEmailsUrl(): string
+{
+    return 'emails.php';
+}
 
-    $query = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
-
-    return 'phrase-rotator.php' . ($query !== '' ? '?' . $query : '');
+function buildAdminSettingsUrl(): string
+{
+    return 'settings.php';
 }
 ?>
 <!doctype html>
@@ -186,7 +197,7 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VOpen Market Admin | Categories</title>
+    <title>VOpen Market Admin | Settings</title>
     <style>
       :root {
         --bg: #eef2f6;
@@ -233,8 +244,7 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
       }
 
       button,
-      input,
-      textarea {
+      input {
         font: inherit;
       }
 
@@ -294,15 +304,6 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
       .nav-link.active {
         background: #fff;
         color: var(--sidebar);
-      }
-
-      .sidebar-note {
-        padding: 16px;
-        border-radius: 18px;
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.76);
-        font-size: 0.95rem;
-        line-height: 1.5;
       }
 
       .sidebar-footer {
@@ -426,9 +427,9 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         color: var(--error-text);
       }
 
-      .grid {
+      .settings-layout {
         display: grid;
-        grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
         gap: 24px;
       }
 
@@ -492,26 +493,16 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
       }
 
       .field-error {
-        display: none;
         margin-top: 8px;
         color: var(--error-text);
-        font-size: 0.95rem;
-      }
-
-      .field.invalid .input {
-        border-color: #d92d20;
-        background: #fff6f5;
-      }
-
-      .field.invalid .field-error {
-        display: block;
+        font-size: 0.94rem;
+        font-weight: 700;
       }
 
       .actions {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        gap: 16px;
+        gap: 12px;
         margin-top: 22px;
         flex-wrap: wrap;
       }
@@ -538,100 +529,60 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         background: var(--accent-strong);
       }
 
-      .button-danger {
-        background: #b42318;
-        color: #fff;
+      .account-list {
+        display: grid;
+        gap: 14px;
       }
 
-      .button-danger:hover {
-        background: #8e1c13;
-      }
-
-      .button-small {
-        padding: 10px 14px;
-        font-size: 0.92rem;
-      }
-
-      .jobs-empty {
-        padding: 24px;
-        border: 1px dashed var(--line);
+      .account-item {
+        padding: 16px 18px;
+        border: 1px solid rgba(23, 36, 51, 0.08);
         border-radius: 18px;
         background: var(--panel-soft);
+      }
+
+      .account-label {
+        display: block;
         color: var(--muted);
-        text-align: center;
-      }
-
-      .category-list {
-        display: grid;
-      }
-
-      .category-item + .category-item {
-        border-top: 1px solid rgba(23, 36, 51, 0.08);
-      }
-
-      .category-item {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 18px 0;
-      }
-
-      .category-item:first-child {
-        padding-top: 0;
-      }
-
-      .category-item:last-child {
-        padding-bottom: 0;
-      }
-
-      .category-head {
-        display: grid;
-        gap: 8px;
-      }
-
-      .category-name {
-        margin: 0;
-        font-size: 1.05rem;
-      }
-
-      .category-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .category-meta span {
-        display: inline-flex;
-        align-items: center;
-        padding: 7px 10px;
-        border-radius: 999px;
-        background: var(--panel-soft);
-        color: var(--muted);
-        font-size: 0.84rem;
+        font-size: 0.85rem;
         font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
-      .category-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        justify-content: flex-end;
+      .account-value {
+        display: block;
+        margin-top: 6px;
+        font-size: 1.02rem;
+        font-weight: 700;
+        word-break: break-word;
       }
 
-      .job-action-form {
-        margin: 0;
+      .tip-box {
+        margin-top: 18px;
+        padding: 18px;
+        border-radius: 18px;
+        background: var(--accent-soft);
+        color: var(--text);
+        line-height: 1.6;
+      }
+
+      .tip-box strong {
+        display: block;
+        margin-bottom: 6px;
       }
 
       .overlay {
         display: none;
       }
 
-      @media (max-width: 960px) {
-        .grid {
+      @media (max-width: 1100px) {
+        .settings-layout {
           grid-template-columns: 1fr;
         }
+      }
 
+      @media (max-width: 960px) {
         .content {
           padding: 22px 16px;
           margin-left: 0;
@@ -662,14 +613,12 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
           display: block;
         }
 
-        .topbar,
-        .category-item {
+        .topbar {
           align-items: flex-start;
           flex-direction: column;
         }
 
-        .badge-group,
-        .category-actions {
+        .badge-group {
           justify-content: flex-start;
         }
       }
@@ -695,15 +644,13 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
         <nav class="nav" aria-label="Sidebar navigation">
           <a href="<?php echo escapeValue(buildAdminJobsSectionUrl()); ?>" class="nav-link">Jobs</a>
-          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link active" aria-current="page">Categories</a>
+          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link">Categories</a>
           <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl()); ?>" class="nav-link">Scrolling Cities</a>
           <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl()); ?>" class="nav-link">Scrolling Categories</a>
           <a href="<?php echo escapeValue(buildAdminPhraseRotatorSectionUrl()); ?>" class="nav-link">Phrase Rotator</a>
-          <a href="emails.php" class="nav-link">Email</a>
-          <a href="settings.php" class="nav-link">Settings</a>
+          <a href="<?php echo escapeValue(buildAdminEmailsUrl()); ?>" class="nav-link">Email</a>
+          <a href="<?php echo escapeValue(buildAdminSettingsUrl()); ?>" class="nav-link active" aria-current="page">Settings</a>
         </nav>
-
-        
 
         <div class="sidebar-footer">
           <div class="sidebar-user">
@@ -723,13 +670,13 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         <header class="topbar">
           <div>
             <button type="button" class="menu-toggle" id="menu-toggle">Menu</button>
-            <h1 class="page-title">Categories</h1>
-            <p class="page-copy">Create category options here with a text input, then select them later while posting jobs.</p>
+            <h1 class="page-title">Settings</h1>
+            <p class="page-copy">Update the admin login username and password from the backend. Enter your current password to confirm any change.</p>
           </div>
 
           <div class="badge-group">
             <div class="badge">Protected login</div>
-            <div class="badge"><?php echo count($categories); ?> categories</div>
+            <div class="badge">Credential management</div>
           </div>
         </header>
 
@@ -743,32 +690,82 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
           <?php endif; ?>
         </section>
 
-        <section class="grid">
+        <section class="settings-layout">
           <article class="card">
             <div class="card-head">
-              <h3>Add Category</h3>
-              <div class="badge">Text input save</div>
+              <h3>Login Credentials</h3>
+              <div class="badge">Admin account</div>
             </div>
-            <div class="card-body">
-              <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" novalidate>
-                <input type="hidden" name="category_action" value="create">
 
-                <div class="field <?php echo $categoryFieldErrors['name'] !== '' ? 'invalid' : ''; ?>">
-                  <label for="category-name">Category name</label>
+            <div class="card-body">
+              <form method="post" action="<?php echo escapeValue(buildAdminSettingsUrl()); ?>" novalidate>
+                <div class="field">
+                  <label for="username">Username</label>
                   <input
-                    id="category-name"
-                    name="name"
+                    id="username"
+                    name="username"
                     class="input"
                     type="text"
-                    placeholder="Independent Contractor"
-                    value="<?php echo escapeValue($categoryFormValues['name']); ?>"
+                    value="<?php echo escapeValue($formValues['username']); ?>"
+                    autocomplete="username"
+                    required
                   >
-                  <div class="field-help">Saved categories appear on the Jobs page as selectable options.</div>
-                  <div class="field-error"><?php echo escapeValue($categoryFieldErrors['name'] !== '' ? $categoryFieldErrors['name'] : 'Please enter a category name.'); ?></div>
+                  <div class="field-help">This username will be used the next time the admin signs in.</div>
+                  <?php if ($fieldErrors['username'] !== ''): ?>
+                    <div class="field-error"><?php echo escapeValue($fieldErrors['username']); ?></div>
+                  <?php endif; ?>
+                </div>
+
+                <div class="field">
+                  <label for="current-password">Current Password</label>
+                  <input
+                    id="current-password"
+                    name="current_password"
+                    class="input"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                  >
+                  <div class="field-help">Required to save a new username or password.</div>
+                  <?php if ($fieldErrors['current_password'] !== ''): ?>
+                    <div class="field-error"><?php echo escapeValue($fieldErrors['current_password']); ?></div>
+                  <?php endif; ?>
+                </div>
+
+                <div class="field">
+                  <label for="new-password">New Password</label>
+                  <input
+                    id="new-password"
+                    name="new_password"
+                    class="input"
+                    type="password"
+                    autocomplete="new-password"
+                    minlength="8"
+                  >
+                  <div class="field-help">Leave this blank if you only want to change the username.</div>
+                  <?php if ($fieldErrors['new_password'] !== ''): ?>
+                    <div class="field-error"><?php echo escapeValue($fieldErrors['new_password']); ?></div>
+                  <?php endif; ?>
+                </div>
+
+                <div class="field">
+                  <label for="confirm-password">Confirm New Password</label>
+                  <input
+                    id="confirm-password"
+                    name="confirm_password"
+                    class="input"
+                    type="password"
+                    autocomplete="new-password"
+                    minlength="8"
+                  >
+                  <div class="field-help">Re-enter the new password to avoid typing mistakes.</div>
+                  <?php if ($fieldErrors['confirm_password'] !== ''): ?>
+                    <div class="field-error"><?php echo escapeValue($fieldErrors['confirm_password']); ?></div>
+                  <?php endif; ?>
                 </div>
 
                 <div class="actions">
-                  <button type="submit" class="button button-primary">Save Category</button>
+                  <button type="submit" class="button button-primary">Save Settings</button>
                 </div>
               </form>
             </div>
@@ -776,35 +773,34 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
           <article class="card">
             <div class="card-head">
-              <h3>Saved Categories</h3>
-              <div class="badge"><?php echo count($categories); ?> saved</div>
+              <h3>Account Overview</h3>
+              <div class="badge">Live details</div>
             </div>
-            <div class="card-body">
-              <?php if ($categories === []): ?>
-                <div class="jobs-empty">No categories have been saved yet.</div>
-              <?php else: ?>
-                <div class="category-list">
-                  <?php foreach ($categories as $category): ?>
-                    <article class="category-item">
-                      <div class="category-head">
-                        <h4 class="category-name"><?php echo escapeValue((string) ($category['name'] ?? '')); ?></h4>
-                        <div class="category-meta">
-                          <span><?php echo (int) ($category['jobs_count'] ?? 0); ?> job<?php echo (int) ($category['jobs_count'] ?? 0) === 1 ? '' : 's'; ?></span>
-                          <span><?php echo escapeValue(formatCreatedAt((string) ($category['created_at'] ?? ''))); ?></span>
-                        </div>
-                      </div>
 
-                      <div class="category-actions">
-                        <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="job-action-form" onsubmit="return confirm('Delete this category?');">
-                          <input type="hidden" name="category_action" value="delete">
-                          <input type="hidden" name="category_id" value="<?php echo (int) ($category['id'] ?? 0); ?>">
-                          <button type="submit" class="button button-danger button-small">Delete</button>
-                        </form>
-                      </div>
-                    </article>
-                  <?php endforeach; ?>
+            <div class="card-body">
+              <div class="account-list">
+                <div class="account-item">
+                  <span class="account-label">Current Username</span>
+                  <span class="account-value"><?php echo escapeValue($currentUsernameValue); ?></span>
                 </div>
-              <?php endif; ?>
+
+                <div class="account-item">
+                  <span class="account-label">Display Name</span>
+                  <span class="account-value"><?php echo escapeValue($currentFullNameValue !== '' ? $currentFullNameValue : 'Not set'); ?></span>
+                </div>
+
+                <div class="account-item">
+                  <span class="account-label">Created</span>
+                  <span class="account-value"><?php echo escapeValue($accountCreatedAt); ?></span>
+                </div>
+
+                <div class="account-item">
+                  <span class="account-label">Last Updated</span>
+                  <span class="account-value"><?php echo escapeValue($accountUpdatedAt); ?></span>
+                </div>
+              </div>
+
+             
             </div>
           </article>
         </section>

@@ -7,15 +7,17 @@ require_once __DIR__ . '/container/db.php';
 requireAdminAuth();
 
 $adminName = adminAuthenticatedUser();
-$categoryFormValues = [
+$citiesPerPage = 10;
+$currentCitiesPage = readPositiveInt($_GET['cities_page'] ?? $_POST['cities_page'] ?? null) ?? 1;
+$cityFormValues = [
     'name' => '',
 ];
-$categoryFieldErrors = [
+$cityFieldErrors = [
     'name' => '',
 ];
 $pageError = '';
 $successMessage = '';
-$categories = [];
+$cities = [];
 
 if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
     $flash = $_SESSION['admin_flash'];
@@ -28,76 +30,96 @@ if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
 }
 
 try {
-    $categories = fetchCategoryRecords();
+    $cities = fetchScrollingCityRecords();
 } catch (Throwable $exception) {
-    $pageError = 'The categories list could not be loaded. Check the database connection and try again.';
+    $pageError = 'The scrolling cities list could not be loaded. Check the database connection and try again.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $categoryAction = (string) ($_POST['category_action'] ?? 'create');
+    $cityAction = (string) ($_POST['city_action'] ?? 'create');
 
-    if (!in_array($categoryAction, ['create', 'delete'], true)) {
-        $categoryAction = 'create';
+    if (!in_array($cityAction, ['create', 'delete'], true)) {
+        $cityAction = 'create';
     }
 
-    if ($categoryAction === 'delete') {
-        $deleteCategoryId = readPositiveInt($_POST['category_id'] ?? null);
+    if ($cityAction === 'delete') {
+        $deleteCityId = readPositiveInt($_POST['city_id'] ?? null);
 
-        if ($deleteCategoryId === null) {
-            $pageError = 'Invalid category selected for deletion.';
+        if ($deleteCityId === null) {
+            $pageError = 'Invalid city selected for deletion.';
         } else {
             try {
-                $categoryToDelete = findCategoryRecordById($categories, $deleteCategoryId);
+                $cityToDelete = findScrollingCityRecordById($cities, $deleteCityId);
 
-                if ($categoryToDelete === null) {
-                    $pageError = 'The selected category was not found.';
+                if ($cityToDelete === null) {
+                    $pageError = 'The selected city was not found.';
                 } else {
-                    deleteCategoryRecord($deleteCategoryId);
+                    deleteScrollingCityRecord($deleteCityId);
 
                     $_SESSION['admin_flash'] = [
-                        'message' => sprintf('"%s" category was deleted.', (string) ($categoryToDelete['name'] ?? '')),
+                        'message' => sprintf('"%s" city was deleted.', (string) ($cityToDelete['name'] ?? '')),
                     ];
 
-                    redirectTo(buildAdminCategoriesSectionUrl());
+                    $remainingCitiesCount = max(count($cities) - 1, 0);
+                    $targetCitiesPage = min(
+                        $currentCitiesPage,
+                        calculatePaginationTotalPages($remainingCitiesCount, $citiesPerPage)
+                    );
+
+                    redirectTo(buildAdminScrollingCitiesSectionUrl($targetCitiesPage));
                 }
             } catch (Throwable $exception) {
-                $pageError = 'The category could not be deleted. Check the database connection and try again.';
+                $pageError = 'The city could not be deleted. Check the database connection and try again.';
             }
         }
     } else {
-        $categoryFormValues['name'] = trim((string) ($_POST['name'] ?? ''));
+        $cityFormValues['name'] = trim((string) ($_POST['name'] ?? ''));
 
-        if ($categoryFormValues['name'] === '') {
-            $categoryFieldErrors['name'] = 'Please enter a category name.';
-        } elseif (textLength($categoryFormValues['name']) > 255) {
-            $categoryFieldErrors['name'] = 'Category name must be 255 characters or fewer.';
+        if ($cityFormValues['name'] === '') {
+            $cityFieldErrors['name'] = 'Please enter a city name.';
+        } elseif (textLength($cityFormValues['name']) > 255) {
+            $cityFieldErrors['name'] = 'City name must be 255 characters or fewer.';
         } else {
             try {
-                if (fetchCategoryRecordByName($categoryFormValues['name']) !== null) {
-                    $categoryFieldErrors['name'] = 'This category already exists.';
+                if (fetchScrollingCityRecordByName($cityFormValues['name']) !== null) {
+                    $cityFieldErrors['name'] = 'This city already exists.';
                 }
             } catch (Throwable $exception) {
                 if ($pageError === '') {
-                    $pageError = 'The category could not be validated. Check the database connection and try again.';
+                    $pageError = 'The city could not be validated. Check the database connection and try again.';
                 }
             }
         }
 
-        if ($pageError === '' && !array_filter($categoryFieldErrors)) {
+        if ($pageError === '' && !array_filter($cityFieldErrors)) {
             try {
-                insertCategoryRecord($categoryFormValues['name']);
+                insertScrollingCityRecord($cityFormValues['name']);
 
                 $_SESSION['admin_flash'] = [
-                    'message' => sprintf('"%s" category was saved.', $categoryFormValues['name']),
+                    'message' => sprintf('"%s" city was saved.', $cityFormValues['name']),
                 ];
 
-                redirectTo(buildAdminCategoriesSectionUrl());
+                $nextCitiesCount = count($cities) + 1;
+                $targetCitiesPage = calculatePaginationTotalPages($nextCitiesCount, $citiesPerPage);
+
+                redirectTo(buildAdminScrollingCitiesSectionUrl($targetCitiesPage));
             } catch (Throwable $exception) {
-                $pageError = 'The category could not be saved. Check the database connection and try again.';
+                $pageError = 'The city could not be saved. Check the database connection and try again.';
             }
         }
     }
 }
+
+$totalCitiesCount = count($cities);
+$totalCitiesPages = calculatePaginationTotalPages($totalCitiesCount, $citiesPerPage);
+
+if ($currentCitiesPage > $totalCitiesPages) {
+    $currentCitiesPage = $totalCitiesPages;
+}
+
+$citiesOffset = ($currentCitiesPage - 1) * $citiesPerPage;
+$visibleCities = array_slice($cities, $citiesOffset, $citiesPerPage);
+$hasCitiesPagination = $totalCitiesCount > $citiesPerPage;
 
 function escapeValue(string $value): string
 {
@@ -124,6 +146,15 @@ function textLength(string $value): int
     return function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
 }
 
+function calculatePaginationTotalPages(int $totalItems, int $itemsPerPage): int
+{
+    if ($itemsPerPage <= 0) {
+        return 1;
+    }
+
+    return $totalItems > 0 ? (int) ceil($totalItems / $itemsPerPage) : 1;
+}
+
 function formatCreatedAt(?string $value): string
 {
     if ($value === null || $value === '') {
@@ -137,11 +168,11 @@ function formatCreatedAt(?string $value): string
     }
 }
 
-function findCategoryRecordById(array $categories, int $categoryId): ?array
+function findScrollingCityRecordById(array $cities, int $cityId): ?array
 {
-    foreach ($categories as $category) {
-        if ((int) ($category['id'] ?? 0) === $categoryId) {
-            return $category;
+    foreach ($cities as $city) {
+        if ((int) ($city['id'] ?? 0) === $cityId) {
+            return $city;
         }
     }
 
@@ -158,9 +189,17 @@ function buildAdminCategoriesSectionUrl(): string
     return 'categories.php';
 }
 
-function buildAdminScrollingCitiesSectionUrl(): string
+function buildAdminScrollingCitiesSectionUrl(int $page = 1): string
 {
-    return 'scrolling-cities.php';
+    $parameters = [];
+
+    if ($page > 1) {
+        $parameters['cities_page'] = $page;
+    }
+
+    $query = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
+
+    return 'scrolling-cities.php' . ($query !== '' ? '?' . $query : '');
 }
 
 function buildAdminScrollingCategoriesSectionUrl(): string
@@ -186,7 +225,7 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VOpen Market Admin | Categories</title>
+    <title>VOpen Market Admin | Scrolling Cities</title>
     <style>
       :root {
         --bg: #eef2f6;
@@ -623,6 +662,48 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         margin: 0;
       }
 
+      .jobs-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .jobs-pagination-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        height: 44px;
+        padding: 0 14px;
+        border: 1px solid rgba(23, 36, 51, 0.12);
+        border-radius: 999px;
+        background: var(--panel-soft);
+        color: var(--text);
+        font-size: 0.95rem;
+        font-weight: 700;
+        transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+      }
+
+      .jobs-pagination-link:hover,
+      .jobs-pagination-link:focus-visible {
+        border-color: rgba(var(--accent-rgb), 0.55);
+        background: #fff;
+        color: var(--accent);
+        outline: none;
+      }
+
+      .jobs-pagination-link.is-active {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .jobs-pagination-link.is-disabled {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
       .overlay {
         display: none;
       }
@@ -695,15 +776,15 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
         <nav class="nav" aria-label="Sidebar navigation">
           <a href="<?php echo escapeValue(buildAdminJobsSectionUrl()); ?>" class="nav-link">Jobs</a>
-          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link active" aria-current="page">Categories</a>
-          <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl()); ?>" class="nav-link">Scrolling Cities</a>
+          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link">Categories</a>
+          <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl()); ?>" class="nav-link active" aria-current="page">Scrolling Cities</a>
           <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl()); ?>" class="nav-link">Scrolling Categories</a>
           <a href="<?php echo escapeValue(buildAdminPhraseRotatorSectionUrl()); ?>" class="nav-link">Phrase Rotator</a>
           <a href="emails.php" class="nav-link">Email</a>
           <a href="settings.php" class="nav-link">Settings</a>
         </nav>
 
-        
+       
 
         <div class="sidebar-footer">
           <div class="sidebar-user">
@@ -723,13 +804,13 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         <header class="topbar">
           <div>
             <button type="button" class="menu-toggle" id="menu-toggle">Menu</button>
-            <h1 class="page-title">Categories</h1>
-            <p class="page-copy">Create category options here with a text input, then select them later while posting jobs.</p>
+            <h1 class="page-title">Scrolling Cities</h1>
+            <p class="page-copy">Add city names here with a text input and save button. Saved cities will appear automatically in the homepage scrolling section.</p>
           </div>
 
           <div class="badge-group">
             <div class="badge">Protected login</div>
-            <div class="badge"><?php echo count($categories); ?> categories</div>
+            <div class="badge"><?php echo count($cities); ?> cities</div>
           </div>
         </header>
 
@@ -746,29 +827,30 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         <section class="grid">
           <article class="card">
             <div class="card-head">
-              <h3>Add Category</h3>
+              <h3>Add City</h3>
               <div class="badge">Text input save</div>
             </div>
             <div class="card-body">
-              <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" novalidate>
-                <input type="hidden" name="category_action" value="create">
+              <form method="post" action="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl($currentCitiesPage)); ?>" novalidate>
+                <input type="hidden" name="city_action" value="create">
+                <input type="hidden" name="cities_page" value="<?php echo $currentCitiesPage; ?>">
 
-                <div class="field <?php echo $categoryFieldErrors['name'] !== '' ? 'invalid' : ''; ?>">
-                  <label for="category-name">Category name</label>
+                <div class="field <?php echo $cityFieldErrors['name'] !== '' ? 'invalid' : ''; ?>">
+                  <label for="city-name">City name</label>
                   <input
-                    id="category-name"
+                    id="city-name"
                     name="name"
                     class="input"
                     type="text"
-                    placeholder="Independent Contractor"
-                    value="<?php echo escapeValue($categoryFormValues['name']); ?>"
+                    placeholder="Toronto"
+                    value="<?php echo escapeValue($cityFormValues['name']); ?>"
                   >
-                  <div class="field-help">Saved categories appear on the Jobs page as selectable options.</div>
-                  <div class="field-error"><?php echo escapeValue($categoryFieldErrors['name'] !== '' ? $categoryFieldErrors['name'] : 'Please enter a category name.'); ?></div>
+                  <div class="field-help">Each saved city appears in the homepage marquee section automatically.</div>
+                  <div class="field-error"><?php echo escapeValue($cityFieldErrors['name'] !== '' ? $cityFieldErrors['name'] : 'Please enter a city name.'); ?></div>
                 </div>
 
                 <div class="actions">
-                  <button type="submit" class="button button-primary">Save Category</button>
+                  <button type="submit" class="button button-primary">Save City</button>
                 </div>
               </form>
             </div>
@@ -776,34 +858,61 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
           <article class="card">
             <div class="card-head">
-              <h3>Saved Categories</h3>
-              <div class="badge"><?php echo count($categories); ?> saved</div>
+              <h3>Saved Cities</h3>
+              <div class="badge"><?php echo $totalCitiesCount; ?> saved</div>
             </div>
             <div class="card-body">
-              <?php if ($categories === []): ?>
-                <div class="jobs-empty">No categories have been saved yet.</div>
+              <?php if ($cities === []): ?>
+                <div class="jobs-empty">No scrolling cities have been saved yet.</div>
               <?php else: ?>
                 <div class="category-list">
-                  <?php foreach ($categories as $category): ?>
+                  <?php foreach ($visibleCities as $city): ?>
                     <article class="category-item">
                       <div class="category-head">
-                        <h4 class="category-name"><?php echo escapeValue((string) ($category['name'] ?? '')); ?></h4>
+                        <h4 class="category-name"><?php echo escapeValue((string) ($city['name'] ?? '')); ?></h4>
                         <div class="category-meta">
-                          <span><?php echo (int) ($category['jobs_count'] ?? 0); ?> job<?php echo (int) ($category['jobs_count'] ?? 0) === 1 ? '' : 's'; ?></span>
-                          <span><?php echo escapeValue(formatCreatedAt((string) ($category['created_at'] ?? ''))); ?></span>
+                          <span><?php echo escapeValue(formatCreatedAt((string) ($city['created_at'] ?? ''))); ?></span>
                         </div>
                       </div>
 
                       <div class="category-actions">
-                        <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="job-action-form" onsubmit="return confirm('Delete this category?');">
-                          <input type="hidden" name="category_action" value="delete">
-                          <input type="hidden" name="category_id" value="<?php echo (int) ($category['id'] ?? 0); ?>">
+                        <form method="post" action="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl($currentCitiesPage)); ?>" class="job-action-form" onsubmit="return confirm('Delete this city?');">
+                          <input type="hidden" name="city_action" value="delete">
+                          <input type="hidden" name="city_id" value="<?php echo (int) ($city['id'] ?? 0); ?>">
+                          <input type="hidden" name="cities_page" value="<?php echo $currentCitiesPage; ?>">
                           <button type="submit" class="button button-danger button-small">Delete</button>
                         </form>
                       </div>
                     </article>
                   <?php endforeach; ?>
                 </div>
+
+                <?php if ($hasCitiesPagination): ?>
+                  <nav class="jobs-pagination" aria-label="Admin scrolling city pages">
+                    <?php if ($currentCitiesPage > 1): ?>
+                      <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl($currentCitiesPage - 1)); ?>" class="jobs-pagination-link" aria-label="Go to previous city page">Previous</a>
+                    <?php else: ?>
+                      <span class="jobs-pagination-link is-disabled" aria-disabled="true">Previous</span>
+                    <?php endif; ?>
+
+                    <?php for ($page = 1; $page <= $totalCitiesPages; $page++): ?>
+                      <a
+                        href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl($page)); ?>"
+                        class="jobs-pagination-link<?php echo $page === $currentCitiesPage ? ' is-active' : ''; ?>"
+                        <?php echo $page === $currentCitiesPage ? ' aria-current="page"' : ''; ?>
+                        aria-label="Go to city page <?php echo $page; ?>"
+                      >
+                        <?php echo $page; ?>
+                      </a>
+                    <?php endfor; ?>
+
+                    <?php if ($currentCitiesPage < $totalCitiesPages): ?>
+                      <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl($currentCitiesPage + 1)); ?>" class="jobs-pagination-link" aria-label="Go to next city page">Next</a>
+                    <?php else: ?>
+                      <span class="jobs-pagination-link is-disabled" aria-disabled="true">Next</span>
+                    <?php endif; ?>
+                  </nav>
+                <?php endif; ?>
               <?php endif; ?>
             </div>
           </article>

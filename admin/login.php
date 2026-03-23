@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VOpen Careers Admin | Login</title>
+    <title>VOpen Market Admin | Login</title>
     <style>
       :root {
         color-scheme: light;
@@ -130,23 +130,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       .brand {
         display: inline-flex;
-        align-items: center;
-        gap: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
         margin-bottom: 28px;
-        font-size: 1rem;
-        font-weight: 700;
-        letter-spacing: 0.02em;
       }
 
-      .brand-mark {
-        width: 42px;
-        height: 42px;
-        border-radius: 14px;
-        display: grid;
-        place-items: center;
-        background: var(--accent-soft);
-        color: var(--accent);
-        font-weight: 800;
+      .brand-logo {
+        display: block;
+        width: min(190px, 100%);
+        height: auto;
+      }
+
+      .brand-copy {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--muted);
       }
 
       .panel h2 {
@@ -268,16 +268,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="shell">
       <section class="intro">
         <span class="eyebrow">Admin Access</span>
-        <h1>Manage VOpen job posts.</h1>
+        <h1>Manage VOpen Market careers.</h1>
         <p>
-          Sign in to access the jobs dashboard, create new listings, and review the roles stored in this browser session.
+          Sign in to access the careers dashboard, create new listings, and review the roles stored in this browser session.
         </p>
       </section>
 
       <section class="panel">
         <div class="brand">
-          <span class="brand-mark">VO</span>
-          <span>VOpen Careers Admin</span>
+          <img src="./images/logo.webp" alt="VOpen Market" class="brand-logo">
+          <span class="brand-copy">Admin panel</span>
         </div>
 
         <h2>Login</h2>

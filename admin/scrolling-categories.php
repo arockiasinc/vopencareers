@@ -7,15 +7,17 @@ require_once __DIR__ . '/container/db.php';
 requireAdminAuth();
 
 $adminName = adminAuthenticatedUser();
-$categoryFormValues = [
+$scrollingCategoriesPerPage = 10;
+$currentScrollingCategoriesPage = readPositiveInt($_GET['scrolling_categories_page'] ?? $_POST['scrolling_categories_page'] ?? null) ?? 1;
+$scrollingCategoryFormValues = [
     'name' => '',
 ];
-$categoryFieldErrors = [
+$scrollingCategoryFieldErrors = [
     'name' => '',
 ];
 $pageError = '';
 $successMessage = '';
-$categories = [];
+$scrollingCategories = [];
 
 if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
     $flash = $_SESSION['admin_flash'];
@@ -28,76 +30,96 @@ if (isset($_SESSION['admin_flash']) && is_array($_SESSION['admin_flash'])) {
 }
 
 try {
-    $categories = fetchCategoryRecords();
+    $scrollingCategories = fetchScrollingCategoryRecords();
 } catch (Throwable $exception) {
-    $pageError = 'The categories list could not be loaded. Check the database connection and try again.';
+    $pageError = 'The scrolling categories list could not be loaded. Check the database connection and try again.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $categoryAction = (string) ($_POST['category_action'] ?? 'create');
+    $scrollingCategoryAction = (string) ($_POST['scrolling_category_action'] ?? 'create');
 
-    if (!in_array($categoryAction, ['create', 'delete'], true)) {
-        $categoryAction = 'create';
+    if (!in_array($scrollingCategoryAction, ['create', 'delete'], true)) {
+        $scrollingCategoryAction = 'create';
     }
 
-    if ($categoryAction === 'delete') {
-        $deleteCategoryId = readPositiveInt($_POST['category_id'] ?? null);
+    if ($scrollingCategoryAction === 'delete') {
+        $deleteScrollingCategoryId = readPositiveInt($_POST['scrolling_category_id'] ?? null);
 
-        if ($deleteCategoryId === null) {
-            $pageError = 'Invalid category selected for deletion.';
+        if ($deleteScrollingCategoryId === null) {
+            $pageError = 'Invalid scrolling category selected for deletion.';
         } else {
             try {
-                $categoryToDelete = findCategoryRecordById($categories, $deleteCategoryId);
+                $scrollingCategoryToDelete = findScrollingCategoryRecordById($scrollingCategories, $deleteScrollingCategoryId);
 
-                if ($categoryToDelete === null) {
-                    $pageError = 'The selected category was not found.';
+                if ($scrollingCategoryToDelete === null) {
+                    $pageError = 'The selected scrolling category was not found.';
                 } else {
-                    deleteCategoryRecord($deleteCategoryId);
+                    deleteScrollingCategoryRecord($deleteScrollingCategoryId);
 
                     $_SESSION['admin_flash'] = [
-                        'message' => sprintf('"%s" category was deleted.', (string) ($categoryToDelete['name'] ?? '')),
+                        'message' => sprintf('"%s" scrolling category was deleted.', (string) ($scrollingCategoryToDelete['name'] ?? '')),
                     ];
 
-                    redirectTo(buildAdminCategoriesSectionUrl());
+                    $remainingScrollingCategoriesCount = max(count($scrollingCategories) - 1, 0);
+                    $targetScrollingCategoriesPage = min(
+                        $currentScrollingCategoriesPage,
+                        calculatePaginationTotalPages($remainingScrollingCategoriesCount, $scrollingCategoriesPerPage)
+                    );
+
+                    redirectTo(buildAdminScrollingCategoriesSectionUrl($targetScrollingCategoriesPage));
                 }
             } catch (Throwable $exception) {
-                $pageError = 'The category could not be deleted. Check the database connection and try again.';
+                $pageError = 'The scrolling category could not be deleted. Check the database connection and try again.';
             }
         }
     } else {
-        $categoryFormValues['name'] = trim((string) ($_POST['name'] ?? ''));
+        $scrollingCategoryFormValues['name'] = trim((string) ($_POST['name'] ?? ''));
 
-        if ($categoryFormValues['name'] === '') {
-            $categoryFieldErrors['name'] = 'Please enter a category name.';
-        } elseif (textLength($categoryFormValues['name']) > 255) {
-            $categoryFieldErrors['name'] = 'Category name must be 255 characters or fewer.';
+        if ($scrollingCategoryFormValues['name'] === '') {
+            $scrollingCategoryFieldErrors['name'] = 'Please enter a business category or service name.';
+        } elseif (textLength($scrollingCategoryFormValues['name']) > 255) {
+            $scrollingCategoryFieldErrors['name'] = 'Scrolling category name must be 255 characters or fewer.';
         } else {
             try {
-                if (fetchCategoryRecordByName($categoryFormValues['name']) !== null) {
-                    $categoryFieldErrors['name'] = 'This category already exists.';
+                if (fetchScrollingCategoryRecordByName($scrollingCategoryFormValues['name']) !== null) {
+                    $scrollingCategoryFieldErrors['name'] = 'This scrolling category already exists.';
                 }
             } catch (Throwable $exception) {
                 if ($pageError === '') {
-                    $pageError = 'The category could not be validated. Check the database connection and try again.';
+                    $pageError = 'The scrolling category could not be validated. Check the database connection and try again.';
                 }
             }
         }
 
-        if ($pageError === '' && !array_filter($categoryFieldErrors)) {
+        if ($pageError === '' && !array_filter($scrollingCategoryFieldErrors)) {
             try {
-                insertCategoryRecord($categoryFormValues['name']);
+                insertScrollingCategoryRecord($scrollingCategoryFormValues['name']);
 
                 $_SESSION['admin_flash'] = [
-                    'message' => sprintf('"%s" category was saved.', $categoryFormValues['name']),
+                    'message' => sprintf('"%s" scrolling category was saved.', $scrollingCategoryFormValues['name']),
                 ];
 
-                redirectTo(buildAdminCategoriesSectionUrl());
+                $nextScrollingCategoriesCount = count($scrollingCategories) + 1;
+                $targetScrollingCategoriesPage = calculatePaginationTotalPages($nextScrollingCategoriesCount, $scrollingCategoriesPerPage);
+
+                redirectTo(buildAdminScrollingCategoriesSectionUrl($targetScrollingCategoriesPage));
             } catch (Throwable $exception) {
-                $pageError = 'The category could not be saved. Check the database connection and try again.';
+                $pageError = 'The scrolling category could not be saved. Check the database connection and try again.';
             }
         }
     }
 }
+
+$totalScrollingCategoriesCount = count($scrollingCategories);
+$totalScrollingCategoriesPages = calculatePaginationTotalPages($totalScrollingCategoriesCount, $scrollingCategoriesPerPage);
+
+if ($currentScrollingCategoriesPage > $totalScrollingCategoriesPages) {
+    $currentScrollingCategoriesPage = $totalScrollingCategoriesPages;
+}
+
+$scrollingCategoriesOffset = ($currentScrollingCategoriesPage - 1) * $scrollingCategoriesPerPage;
+$visibleScrollingCategories = array_slice($scrollingCategories, $scrollingCategoriesOffset, $scrollingCategoriesPerPage);
+$hasScrollingCategoriesPagination = $totalScrollingCategoriesCount > $scrollingCategoriesPerPage;
 
 function escapeValue(string $value): string
 {
@@ -124,6 +146,15 @@ function textLength(string $value): int
     return function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
 }
 
+function calculatePaginationTotalPages(int $totalItems, int $itemsPerPage): int
+{
+    if ($itemsPerPage <= 0) {
+        return 1;
+    }
+
+    return $totalItems > 0 ? (int) ceil($totalItems / $itemsPerPage) : 1;
+}
+
 function formatCreatedAt(?string $value): string
 {
     if ($value === null || $value === '') {
@@ -137,11 +168,11 @@ function formatCreatedAt(?string $value): string
     }
 }
 
-function findCategoryRecordById(array $categories, int $categoryId): ?array
+function findScrollingCategoryRecordById(array $scrollingCategories, int $scrollingCategoryId): ?array
 {
-    foreach ($categories as $category) {
-        if ((int) ($category['id'] ?? 0) === $categoryId) {
-            return $category;
+    foreach ($scrollingCategories as $scrollingCategory) {
+        if ((int) ($scrollingCategory['id'] ?? 0) === $scrollingCategoryId) {
+            return $scrollingCategory;
         }
     }
 
@@ -163,9 +194,17 @@ function buildAdminScrollingCitiesSectionUrl(): string
     return 'scrolling-cities.php';
 }
 
-function buildAdminScrollingCategoriesSectionUrl(): string
+function buildAdminScrollingCategoriesSectionUrl(int $page = 1): string
 {
-    return 'scrolling-categories.php';
+    $parameters = [];
+
+    if ($page > 1) {
+        $parameters['scrolling_categories_page'] = $page;
+    }
+
+    $query = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
+
+    return 'scrolling-categories.php' . ($query !== '' ? '?' . $query : '');
 }
 
 function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
@@ -186,7 +225,7 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VOpen Market Admin | Categories</title>
+    <title>VOpen Market Admin | Scrolling Categories</title>
     <style>
       :root {
         --bg: #eef2f6;
@@ -623,6 +662,48 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         margin: 0;
       }
 
+      .jobs-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .jobs-pagination-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        height: 44px;
+        padding: 0 14px;
+        border: 1px solid rgba(23, 36, 51, 0.12);
+        border-radius: 999px;
+        background: var(--panel-soft);
+        color: var(--text);
+        font-size: 0.95rem;
+        font-weight: 700;
+        transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+      }
+
+      .jobs-pagination-link:hover,
+      .jobs-pagination-link:focus-visible {
+        border-color: rgba(var(--accent-rgb), 0.55);
+        background: #fff;
+        color: var(--accent);
+        outline: none;
+      }
+
+      .jobs-pagination-link.is-active {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .jobs-pagination-link.is-disabled {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
       .overlay {
         display: none;
       }
@@ -695,15 +776,15 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
 
         <nav class="nav" aria-label="Sidebar navigation">
           <a href="<?php echo escapeValue(buildAdminJobsSectionUrl()); ?>" class="nav-link">Jobs</a>
-          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link active" aria-current="page">Categories</a>
+          <a href="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="nav-link">Categories</a>
           <a href="<?php echo escapeValue(buildAdminScrollingCitiesSectionUrl()); ?>" class="nav-link">Scrolling Cities</a>
-          <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl()); ?>" class="nav-link">Scrolling Categories</a>
+          <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl()); ?>" class="nav-link active" aria-current="page">Scrolling Categories</a>
           <a href="<?php echo escapeValue(buildAdminPhraseRotatorSectionUrl()); ?>" class="nav-link">Phrase Rotator</a>
           <a href="emails.php" class="nav-link">Email</a>
           <a href="settings.php" class="nav-link">Settings</a>
         </nav>
 
-        
+       
 
         <div class="sidebar-footer">
           <div class="sidebar-user">
@@ -723,13 +804,13 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
         <header class="topbar">
           <div>
             <button type="button" class="menu-toggle" id="menu-toggle">Menu</button>
-            <h1 class="page-title">Categories</h1>
-            <p class="page-copy">Create category options here with a text input, then select them later while posting jobs.</p>
+            <h1 class="page-title">Scrolling Categories</h1>
+            <p class="page-copy">Add business categories and services here with a text input and save button. Saved items will appear automatically in the homepage scrolling section.</p>
           </div>
 
           <div class="badge-group">
             <div class="badge">Protected login</div>
-            <div class="badge"><?php echo count($categories); ?> categories</div>
+            <div class="badge"><?php echo $totalScrollingCategoriesCount; ?> categories</div>
           </div>
         </header>
 
@@ -750,21 +831,22 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
               <div class="badge">Text input save</div>
             </div>
             <div class="card-body">
-              <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" novalidate>
-                <input type="hidden" name="category_action" value="create">
+              <form method="post" action="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl($currentScrollingCategoriesPage)); ?>" novalidate>
+                <input type="hidden" name="scrolling_category_action" value="create">
+                <input type="hidden" name="scrolling_categories_page" value="<?php echo $currentScrollingCategoriesPage; ?>">
 
-                <div class="field <?php echo $categoryFieldErrors['name'] !== '' ? 'invalid' : ''; ?>">
-                  <label for="category-name">Category name</label>
+                <div class="field <?php echo $scrollingCategoryFieldErrors['name'] !== '' ? 'invalid' : ''; ?>">
+                  <label for="scrolling-category-name">Business category or service</label>
                   <input
-                    id="category-name"
+                    id="scrolling-category-name"
                     name="name"
                     class="input"
                     type="text"
-                    placeholder="Independent Contractor"
-                    value="<?php echo escapeValue($categoryFormValues['name']); ?>"
+                    placeholder="Marketing and Advertising Services"
+                    value="<?php echo escapeValue($scrollingCategoryFormValues['name']); ?>"
                   >
-                  <div class="field-help">Saved categories appear on the Jobs page as selectable options.</div>
-                  <div class="field-error"><?php echo escapeValue($categoryFieldErrors['name'] !== '' ? $categoryFieldErrors['name'] : 'Please enter a category name.'); ?></div>
+                  <div class="field-help">Each saved item appears in the homepage business categories marquee automatically.</div>
+                  <div class="field-error"><?php echo escapeValue($scrollingCategoryFieldErrors['name'] !== '' ? $scrollingCategoryFieldErrors['name'] : 'Please enter a business category or service name.'); ?></div>
                 </div>
 
                 <div class="actions">
@@ -777,33 +859,60 @@ function buildAdminPhraseRotatorSectionUrl(int $page = 1): string
           <article class="card">
             <div class="card-head">
               <h3>Saved Categories</h3>
-              <div class="badge"><?php echo count($categories); ?> saved</div>
+              <div class="badge"><?php echo $totalScrollingCategoriesCount; ?> saved</div>
             </div>
             <div class="card-body">
-              <?php if ($categories === []): ?>
-                <div class="jobs-empty">No categories have been saved yet.</div>
+              <?php if ($scrollingCategories === []): ?>
+                <div class="jobs-empty">No scrolling categories have been saved yet.</div>
               <?php else: ?>
                 <div class="category-list">
-                  <?php foreach ($categories as $category): ?>
+                  <?php foreach ($visibleScrollingCategories as $scrollingCategory): ?>
                     <article class="category-item">
                       <div class="category-head">
-                        <h4 class="category-name"><?php echo escapeValue((string) ($category['name'] ?? '')); ?></h4>
+                        <h4 class="category-name"><?php echo escapeValue((string) ($scrollingCategory['name'] ?? '')); ?></h4>
                         <div class="category-meta">
-                          <span><?php echo (int) ($category['jobs_count'] ?? 0); ?> job<?php echo (int) ($category['jobs_count'] ?? 0) === 1 ? '' : 's'; ?></span>
-                          <span><?php echo escapeValue(formatCreatedAt((string) ($category['created_at'] ?? ''))); ?></span>
+                          <span><?php echo escapeValue(formatCreatedAt((string) ($scrollingCategory['created_at'] ?? ''))); ?></span>
                         </div>
                       </div>
 
                       <div class="category-actions">
-                        <form method="post" action="<?php echo escapeValue(buildAdminCategoriesSectionUrl()); ?>" class="job-action-form" onsubmit="return confirm('Delete this category?');">
-                          <input type="hidden" name="category_action" value="delete">
-                          <input type="hidden" name="category_id" value="<?php echo (int) ($category['id'] ?? 0); ?>">
+                        <form method="post" action="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl($currentScrollingCategoriesPage)); ?>" class="job-action-form" onsubmit="return confirm('Delete this scrolling category?');">
+                          <input type="hidden" name="scrolling_category_action" value="delete">
+                          <input type="hidden" name="scrolling_category_id" value="<?php echo (int) ($scrollingCategory['id'] ?? 0); ?>">
+                          <input type="hidden" name="scrolling_categories_page" value="<?php echo $currentScrollingCategoriesPage; ?>">
                           <button type="submit" class="button button-danger button-small">Delete</button>
                         </form>
                       </div>
                     </article>
                   <?php endforeach; ?>
                 </div>
+
+                <?php if ($hasScrollingCategoriesPagination): ?>
+                  <nav class="jobs-pagination" aria-label="Admin scrolling category pages">
+                    <?php if ($currentScrollingCategoriesPage > 1): ?>
+                      <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl($currentScrollingCategoriesPage - 1)); ?>" class="jobs-pagination-link" aria-label="Go to previous scrolling category page">Previous</a>
+                    <?php else: ?>
+                      <span class="jobs-pagination-link is-disabled" aria-disabled="true">Previous</span>
+                    <?php endif; ?>
+
+                    <?php for ($page = 1; $page <= $totalScrollingCategoriesPages; $page++): ?>
+                      <a
+                        href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl($page)); ?>"
+                        class="jobs-pagination-link<?php echo $page === $currentScrollingCategoriesPage ? ' is-active' : ''; ?>"
+                        <?php echo $page === $currentScrollingCategoriesPage ? ' aria-current="page"' : ''; ?>
+                        aria-label="Go to scrolling category page <?php echo $page; ?>"
+                      >
+                        <?php echo $page; ?>
+                      </a>
+                    <?php endfor; ?>
+
+                    <?php if ($currentScrollingCategoriesPage < $totalScrollingCategoriesPages): ?>
+                      <a href="<?php echo escapeValue(buildAdminScrollingCategoriesSectionUrl($currentScrollingCategoriesPage + 1)); ?>" class="jobs-pagination-link" aria-label="Go to next scrolling category page">Next</a>
+                    <?php else: ?>
+                      <span class="jobs-pagination-link is-disabled" aria-disabled="true">Next</span>
+                    <?php endif; ?>
+                  </nav>
+                <?php endif; ?>
               <?php endif; ?>
             </div>
           </article>

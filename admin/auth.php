@@ -13,6 +13,19 @@ const VOPEN_ADMIN_SESSION_NAME_KEY = 'vopen_admin_name';
 const VOPEN_ADMIN_LAST_ACTIVE_KEY = 'vopen_admin_last_active';
 const VOPEN_ADMIN_IDLE_TIMEOUT = 28800;
 
+function storeAdminSessionUser(array $adminUser): void
+{
+    $storedUsername = trim((string) ($adminUser['username'] ?? ''));
+
+    if ($storedUsername === '') {
+        return;
+    }
+
+    $_SESSION[VOPEN_ADMIN_SESSION_KEY] = $storedUsername;
+    $_SESSION[VOPEN_ADMIN_SESSION_NAME_KEY] = trim((string) ($adminUser['full_name'] ?? '')) ?: $storedUsername;
+    $_SESSION[VOPEN_ADMIN_LAST_ACTIVE_KEY] = time();
+}
+
 function redirectTo(string $path): never
 {
     header('Location: ' . $path);
@@ -74,6 +87,11 @@ function adminAuthenticatedUser(): string
     return (string) ($_SESSION[VOPEN_ADMIN_SESSION_KEY] ?? '');
 }
 
+function adminAuthenticatedUsername(): string
+{
+    return trim((string) ($_SESSION[VOPEN_ADMIN_SESSION_KEY] ?? ''));
+}
+
 function attemptAdminLogin(string $username, string $password): bool
 {
     $adminUser = fetchAdminUserRecordByUsername($username);
@@ -90,9 +108,7 @@ function attemptAdminLogin(string $username, string $password): bool
     }
 
     session_regenerate_id(true);
-    $_SESSION[VOPEN_ADMIN_SESSION_KEY] = $storedUsername;
-    $_SESSION[VOPEN_ADMIN_SESSION_NAME_KEY] = trim((string) ($adminUser['full_name'] ?? '')) ?: $storedUsername;
-    $_SESSION[VOPEN_ADMIN_LAST_ACTIVE_KEY] = time();
+    storeAdminSessionUser($adminUser);
 
     return true;
 }
